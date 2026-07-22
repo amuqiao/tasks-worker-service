@@ -7,8 +7,9 @@
 | Entry | Scope |
 |---|---|
 | `dev.sh` | 本地开发：bootstrap、doctor、端口扫描、API 生命周期、迁移和测试快捷入口。 |
-| `verify.sh` | 一次性验证：env、syntax、registry、Alembic、脚本 smoke、pytest、PostgreSQL integration gate。 |
-| `deploy.sh` | 部署形态入口：当前只提供部署前置检查和模式说明，具体服务可在此基础上接入 compose。 |
+| `verify.sh` | 一次性验证：env、syntax、registry、Alembic、脚本 smoke、pytest、PostgreSQL integration gate、migration roundtrip gate。 |
+| `deploy.sh` | 三模式部署入口：local、compose-deps、compose-full。 |
+| `tools.sh` | 无默认持久副作用工具：secret 生成、DATABASE__URL / REDIS__URL 编码。 |
 
 ## Shared Helpers
 
@@ -16,7 +17,11 @@
 |---|---|
 | `lib/common.sh` | 根目录定位、稳定输出 helper、错误退出、env 读取、前置条件检查。 |
 | `lib/runtime.sh` | 本地 API host/port/url、PID/log 路径、端口和进程 helper。 |
+| `lib/compose.sh` | docker compose / docker-compose 适配、compose project name 派生和 env 注入。 |
+| `lib/modes.sh` | local 与 compose-full 互斥保护、compose project 冲突检查。 |
 | `dev/check_ports.py` | 本地 TCP 端口扫描，支持人读输出和 JSON 输出。 |
+| `tools/env_url.py` | 生成编码后的 PostgreSQL / Redis URL。 |
+| `verify/migration_roundtrip.py` | 临时本地 PostgreSQL migration roundtrip 检查。 |
 
 ## Contract Rules
 
@@ -32,6 +37,9 @@
 ./scripts/dev.sh doctor
 ./scripts/dev.sh ports 8100 25432 26379
 ./scripts/dev.sh start api
+./scripts/deploy.sh up compose-deps
+./scripts/deploy.sh up compose-full
+./scripts/tools.sh secret
 ./scripts/verify.sh check
 ./scripts/deploy.sh check
 ```

@@ -25,6 +25,7 @@ Usage:
   alembic     Check Alembic heads and offline SQL
   tests       Run pytest
   postgres    Run gated PostgreSQL integration checks
+  migration-roundtrip Run upgrade/downgrade/re-upgrade against a temporary local PostgreSQL database
   scripts     Check script entrypoints
   help        Show this help
 
@@ -43,6 +44,7 @@ Usage:
   ./scripts/verify.sh check
   ./scripts/verify.sh registry
   ./scripts/verify.sh postgres
+  ./scripts/verify.sh migration-roundtrip
 
 Exit Codes:
   0  成功
@@ -83,6 +85,31 @@ Usage:
 
 常用示例:
   ./scripts/verify.sh ${name}
+EOF
+      ;;
+    migration-roundtrip)
+      cat <<'EOF'
+Usage:
+  ./scripts/verify.sh migration-roundtrip
+
+职责:
+  使用临时本地 PostgreSQL 数据库验证 Alembic upgrade head -> downgrade base -> upgrade head。
+
+配置与环境变量:
+  DATABASE__URL 可覆盖本地 admin 连接来源；目标数据库会自动追加 _migration_rt_<suffix>。
+
+副作用与保护边界:
+  会创建并删除一个临时本地 PostgreSQL 数据库。
+  会拒绝明显非本地主机。
+  不修改当前应用数据库。
+
+常用示例:
+  ./scripts/verify.sh migration-roundtrip
+
+Exit Codes:
+  0  成功
+  2  配置或前置条件错误
+  其他非 0 由 PostgreSQL / Alembic 透传
 EOF
       ;;
     postgres)
@@ -175,6 +202,13 @@ case "$cmd" in
     uv run alembic upgrade head
     FASTAPI_LITE_POSTGRES_INTEGRATION=1 uv run pytest -m postgres_integration
     ;;
+  migration-roundtrip)
+    shift
+    if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
+    reject_extra_args "usage: ./scripts/verify.sh migration-roundtrip" "$@"
+    cd "$ROOT_DIR"
+    uv run python scripts/verify/migration_roundtrip.py
+    ;;
   scripts)
     shift
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
@@ -183,12 +217,17 @@ case "$cmd" in
     bash -n scripts/dev.sh
     bash -n scripts/deploy.sh
     bash -n scripts/verify.sh
+    bash -n scripts/tools.sh
+    bash -n scripts/lib/compose.sh
+    bash -n scripts/lib/modes.sh
     ./scripts/dev.sh help >/dev/null
     ./scripts/dev.sh doctor >/dev/null
     ./scripts/dev.sh ports 1 --json --allow-busy >/dev/null
     ./scripts/deploy.sh help >/dev/null
     ./scripts/deploy.sh modes >/dev/null
     ./scripts/verify.sh help >/dev/null
+    ./scripts/tools.sh help >/dev/null
+    ./scripts/tools.sh secret --prefix test_ >/dev/null
     echo "OK scripts"
     ;;
   help|-h|--help)

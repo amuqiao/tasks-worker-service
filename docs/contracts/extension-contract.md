@@ -103,6 +103,7 @@ If the extension changes migrations or Postgres-specific behavior, also run:
 
 ```bash
 ./scripts/verify.sh postgres
+./scripts/verify.sh migration-roundtrip
 ```
 
 ## Adding Script Commands
@@ -112,6 +113,7 @@ If the extension changes migrations or Postgres-specific behavior, also run:
 - 本地开发生命周期、端口、迁移和环境检查归 `scripts/dev.sh`。
 - 一次性验证归 `scripts/verify.sh`。
 - 部署形态和 compose 接入归 `scripts/deploy.sh`。
+- 无默认持久副作用的本地辅助工具归 `scripts/tools.sh`。
 - 公共 shell helper 放在 `scripts/lib/`。
 - 结构化或复杂解析优先用 Python helper，例如 `scripts/dev/check_ports.py`。
 

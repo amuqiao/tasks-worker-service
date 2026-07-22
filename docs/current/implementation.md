@@ -101,10 +101,16 @@ route
 - `./scripts/dev.sh ports`
 - `./scripts/dev.sh migrate`
 - `./scripts/deploy.sh help`
+- `./scripts/deploy.sh up|down|status local`
+- `./scripts/deploy.sh up|down|status compose-deps`
+- `./scripts/deploy.sh up|down|status compose-full`
 - `./scripts/verify.sh check`
 - `./scripts/verify.sh postgres`
+- `./scripts/verify.sh migration-roundtrip`
+- `./scripts/tools.sh secret`
+- `./scripts/tools.sh env-url`
 
-`dev.sh` 当前提供本地 API 进程管理、端口扫描、环境检查、迁移和测试快捷入口。`verify.sh check` 当前覆盖 env、syntax、registry、alembic、scripts 和 pytest。`deploy.sh check` 当前执行部署前置检查；具体服务添加 compose 文件后，可沿用 `deploy.sh modes/check` 的入口范式继续扩展。
+`dev.sh` 当前提供本地 API 进程管理、端口扫描、环境检查、迁移和测试快捷入口。`deploy.sh` 当前提供三种基础部署模型：`local` 委托 `dev.sh`，`compose-deps` 管理 PostgreSQL / Redis，`compose-full` 管理 API / PostgreSQL / Redis，并通过 `start-api.sh` 作为 API 容器入口。`verify.sh check` 当前覆盖 env、syntax、registry、alembic、scripts 和 pytest；`postgres` 与 `migration-roundtrip` 是显式 PostgreSQL gate。`tools.sh` 当前提供无默认持久副作用的 secret 和 env URL 生成工具。
 
 ## Verification Baseline
 
@@ -115,8 +121,9 @@ route
 ./scripts/deploy.sh check
 ```
 
-PostgreSQL 集成测试是显式 gate：
+PostgreSQL 集成测试和 migration roundtrip 是显式 gate：
 
 ```bash
 ./scripts/verify.sh postgres
+./scripts/verify.sh migration-roundtrip
 ```

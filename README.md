@@ -13,8 +13,9 @@
 - `items` CRUD 示例模块。
 - lifecycle providers：Postgres、Redis fake boundary、object storage、shared HTTP client。
 - `app/tools/` 示例工具模块。
-- `dev.sh`、`deploy.sh`、`verify.sh` 脚本入口。
-- 脚本公共能力：`doctor`、端口扫描、PID/log 管理、迁移入口、registry/env/docs drift gate。
+- `dev.sh`、`deploy.sh`、`verify.sh`、`tools.sh` 脚本入口。
+- 脚本公共能力：`doctor`、端口扫描、PID/log 管理、三模式部署入口、迁移入口、secret/env-url 工具、registry/env/docs drift gate。
+- Dockerfile、docker-compose.yml 和 `start-api.sh` API 容器入口。
 
 ## Quick Start
 
@@ -56,6 +57,25 @@ Run the API locally:
 
 The app process can start without opening a database connection, but `/ready` and the `items` API require a reachable PostgreSQL database unless tests inject a session override.
 
+Start local dependencies with Docker Compose:
+
+```bash
+./scripts/deploy.sh up compose-deps
+```
+
+Run the API, PostgreSQL, and Redis in Compose:
+
+```bash
+./scripts/deploy.sh up compose-full
+```
+
+Generate local secrets and encoded connection URLs:
+
+```bash
+./scripts/tools.sh secret
+./scripts/tools.sh env-url postgres --username postgres --host 127.0.0.1 --database fastapi_lite --password-stdin
+```
+
 ## Documentation
 
 - Current implementation facts: [`docs/current/implementation.md`](docs/current/implementation.md)
@@ -80,3 +100,9 @@ PostgreSQL integration gate:
 ```
 
 The Postgres gate is opt-in and protected by a `_test` database check.
+
+Migration roundtrip gate:
+
+```bash
+./scripts/verify.sh migration-roundtrip
+```

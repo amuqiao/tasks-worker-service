@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${ROOT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 source "$SCRIPT_DIR/lib/runtime.sh"
+source "$SCRIPT_DIR/lib/modes.sh"
 
 usage() {
   cat <<EOF
@@ -283,6 +284,7 @@ start_api() {
   require_command curl "install curl first"
   require_process_identity_check
   ensure_runtime_dirs
+  assert_no_compose_full_api_running_for_local
   assert_api_port_free
   cd "$ROOT_DIR"
   python_bin="$(uv run python -c 'import sys; print(sys.executable)')"

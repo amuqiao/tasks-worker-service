@@ -8,7 +8,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_DIR))
 
 from app.core.config.env_manifest import ENV_KEY_MANIFEST
-from app.core.config.settings import AppSettings
+from app.core.config.settings import AppSettings, validate_app_env_key_drift
 
 KEY_PATTERN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=")
 
@@ -55,6 +55,7 @@ def check_example_alignment(path: Path) -> list[str]:
 def validate_profiles() -> list[str]:
     issues: list[str] = []
     try:
+        validate_app_env_key_drift()
         AppSettings()
     except Exception as exc:
         issues.append(f"local settings failed: {type(exc).__name__}: {exc}")

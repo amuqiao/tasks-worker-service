@@ -53,7 +53,7 @@ def script_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
 
 
 def test_script_help_commands_work():
-    for script in ("./scripts/dev.sh", "./scripts/deploy.sh", "./scripts/verify.sh"):
+    for script in ("./scripts/dev.sh", "./scripts/deploy.sh", "./scripts/verify.sh", "./scripts/tools.sh"):
         result = run_script(script, "help")
         assert result.returncode == 0
         assert "Usage:" in result.stdout
@@ -81,6 +81,15 @@ def test_verify_subcommand_help_does_not_execute_task():
     assert "Usage:" in result.stdout
     assert "专用 PostgreSQL _test 数据库" in result.stdout
     assert "OK test-database" not in result.stdout
+
+
+def test_migration_roundtrip_help_does_not_execute_task():
+    result = run_script("./scripts/verify.sh", "migration-roundtrip", "--help")
+
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "upgrade head -> downgrade base -> upgrade head" in result.stdout
+    assert "OK        upgrade" not in result.stdout
 
 
 def test_dev_ports_help_does_not_require_json_execution():
@@ -266,5 +275,66 @@ def test_deploy_modes_smoke():
     result = run_script("./scripts/deploy.sh", "modes")
 
     assert result.returncode == 0
-    assert "local-api" in result.stdout
-    assert "compose" in result.stdout
+    assert "local" in result.stdout
+    assert "compose-deps" in result.stdout
+    assert "compose-full" in result.stdout
+
+
+def test_deploy_local_status_delegates_to_dev_status():
+    result = run_script("./scripts/deploy.sh", "status", "local")
+
+    assert result.returncode == 0
+    assert "== API ==" in result.stdout
+
+
+def test_deploy_compose_subcommand_help():
+    result = run_script("./scripts/deploy.sh", "up", "--help")
+
+    assert result.returncode == 0
+    assert "compose-deps" in result.stdout
+    assert "compose-full" in result.stdout
+
+
+def test_tools_secret_outputs_prefixed_token():
+    result = run_script("./scripts/tools.sh", "secret", "--prefix", "test_")
+
+    assert result.returncode == 0
+    token = result.stdout.strip()
+    assert token.startswith("test_")
+    assert len(token) > len("test_") + 16
+
+
+def test_tools_env_url_postgres_encodes_password():
+    result = subprocess.run(
+        [
+            "./scripts/tools.sh",
+            "env-url",
+            "postgres",
+            "--username",
+            "user name",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "25432",
+            "--database",
+            "fastapi lite",
+            "--password-stdin",
+        ],
+        cwd=ROOT_DIR,
+        input="p@ss word",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "DATABASE__URL=postgresql+asyncpg://user%20name:p%40ss%20word@127.0.0.1:25432/fastapi%20lite" in result.stdout
+    assert "# password_present=true" in result.stdout
+
+
+def test_tools_env_url_redis_without_password():
+    result = run_script("./scripts/tools.sh", "env-url", "redis", "--host", "127.0.0.1", "--port", "26379", "--db", "0")
+
+    assert result.returncode == 0
+    assert "REDIS__URL=redis://127.0.0.1:26379/0" in result.stdout
+    assert "# password_present=false" in result.stdout
