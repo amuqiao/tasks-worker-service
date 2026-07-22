@@ -149,3 +149,10 @@ assert_api_port_free() {
   fi
   die "api port $API_PORT is already used by pid=$owner_pid; stop it or set API_PORT" 4
 }
+
+assert_api_port_free_for_run() {
+  local owner_pid
+  owner_pid="$(port_owner_pid "$API_PORT")"
+  [[ -z "$owner_pid" ]] && return 0
+  die "api port $API_PORT is already used by pid=$owner_pid; stop it before ./scripts/dev.sh run or set API_PORT" 4
+}

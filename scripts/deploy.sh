@@ -205,6 +205,9 @@ status_local() {
 
 up_deps() {
   require_env_file_for_compose
+  assert_compose_host_ports_free "compose-deps" \
+    "POSTGRES_HOST_PORT:25432:postgres:5432/tcp" \
+    "REDIS_HOST_PORT:26379:redis:6379/tcp"
   assert_no_compose_project_name_conflict
   section "Compose Deps"
   compose up -d postgres redis
@@ -225,6 +228,10 @@ status_deps() {
 
 up_full() {
   require_env_file_for_compose
+  assert_compose_host_ports_free "compose-full" \
+    "API_HOST_PORT:8100:api:8100/tcp" \
+    "POSTGRES_HOST_PORT:25432:postgres:5432/tcp" \
+    "REDIS_HOST_PORT:26379:redis:6379/tcp"
   assert_no_compose_project_name_conflict
   assert_no_local_api_running_for_compose_full
   section "Compose Full"

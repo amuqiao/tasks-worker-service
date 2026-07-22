@@ -268,6 +268,8 @@ doctor() {
 run_api() {
   require_uv
   validate_port API_PORT "$API_PORT"
+  assert_no_compose_full_api_running_for_local
+  assert_api_port_free_for_run
   cd "$ROOT_DIR"
   exec uv run uvicorn app.main:app --host "$API_HOST" --port "$API_PORT" --reload
 }
