@@ -14,18 +14,42 @@ from app.api.routes.health import router as health_router
 from app.core.config import AppSettings, get_settings
 from app.core.context import get_request_id, get_trace_id
 from app.core.exceptions import AppError
-from app.core.lifecycle import build_health_registry
+from app.core.lifecycle import LifecycleProviderRegistry, build_health_registry
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
+from app.integrations.http_client import HttpClientProvider
+from app.integrations.postgres import PostgresProvider
+from app.integrations.redis import RedisProvider
+from app.integrations.storage import ObjectStorageProvider
 from app.schemas.envelope import error_envelope
 
 logger = logging.getLogger(__name__)
 
 
+def build_lifecycle_provider_registry() -> LifecycleProviderRegistry:
+    provider_registry = LifecycleProviderRegistry()
+    provider_registry.register(PostgresProvider())
+    provider_registry.register(RedisProvider())
+    provider_registry.register(ObjectStorageProvider())
+    provider_registry.register(HttpClientProvider())
+    provider_registry.validate()
+    return provider_registry
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    application.state.health_checks = build_health_registry()
-    yield
+    settings = application.state.settings
+    health_registry = build_health_registry()
+    provider_registry = build_lifecycle_provider_registry()
+    application.state.lifecycle_providers = provider_registry
+    application.state.health_checks = health_registry
+    await provider_registry.startup(application, settings, health_registry)
+    health_registry.validate()
+    health_registry.freeze()
+    try:
+        yield
+    finally:
+        await provider_registry.shutdown(application)
 
 
 def _request_id(request: Request) -> str:

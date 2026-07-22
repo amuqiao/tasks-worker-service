@@ -8,22 +8,29 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
+def create_db_engine(settings: AppSettings) -> AsyncEngine:
+    app_settings = settings or get_settings()
+    engine_kwargs: dict[str, object] = {"pool_pre_ping": True}
+    connect_args = {} if app_settings.database.ssl else {"ssl": False}
+    if app_settings.database.url.startswith("sqlite+aiosqlite://"):
+        connect_args = {}
+    else:
+        engine_kwargs["pool_size"] = app_settings.database.pool_size
+        engine_kwargs["max_overflow"] = app_settings.database.max_overflow
+    return create_async_engine(
+        app_settings.database.url,
+        connect_args=connect_args,
+        **engine_kwargs,
+    )
+
+
 def init_db_engine(settings: AppSettings | None = None) -> AsyncEngine:
     global _engine, _session_factory
 
     if _engine is not None:
         return _engine
     app_settings = settings or get_settings()
-    connect_args = {} if app_settings.database.ssl else {"ssl": False}
-    if app_settings.database.url.startswith("sqlite+aiosqlite://"):
-        connect_args = {}
-    _engine = create_async_engine(
-        app_settings.database.url,
-        pool_pre_ping=True,
-        pool_size=app_settings.database.pool_size,
-        max_overflow=app_settings.database.max_overflow,
-        connect_args=connect_args,
-    )
+    _engine = create_db_engine(app_settings)
     _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
     return _engine
 
@@ -54,8 +61,6 @@ def clear_session_factory() -> None:
 
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
-    if _session_factory is None:
-        init_db_engine()
     if _session_factory is None:
         raise RuntimeError("database session factory is not initialized")
     return _session_factory

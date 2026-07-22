@@ -5,7 +5,6 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.config import AppSettings
 from app.db.base import Base
-from app.db.database import clear_session_factory, configure_session_factory, current_session_factory
 from app.main import create_app
 from app.models import Item  # noqa: F401
 
@@ -15,6 +14,7 @@ def test_settings() -> AppSettings:
     return AppSettings(
         runtime={"app_env": "local"},
         security={"service_api_key": "test-service-key", "disable_auth": False},
+        database={"url": "sqlite+aiosqlite:///:memory:"},
         storage={"backend": "disabled"},
         observability={"access_log_enabled": False},
     )
@@ -23,6 +23,12 @@ def test_settings() -> AppSettings:
 @pytest.fixture
 def app(test_settings):
     return create_app(test_settings)
+
+
+@pytest.fixture
+def sqlite_app(app, sqlite_session_factory):
+    app.state.db_session_factory_override = sqlite_session_factory
+    return app
 
 
 @pytest_asyncio.fixture
@@ -35,13 +41,7 @@ async def sqlite_session_factory():
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    previous = current_session_factory()
-    configure_session_factory(factory)
     try:
         yield factory
     finally:
-        if previous is None:
-            clear_session_factory()
-        else:
-            configure_session_factory(previous)
         await engine.dispose()

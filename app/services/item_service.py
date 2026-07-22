@@ -123,7 +123,3 @@ class ItemService:
             assert result.item is not None
             await uow.commit()
             return item_to_response(result.item)
-
-
-def get_item_service() -> ItemService:
-    return ItemService()

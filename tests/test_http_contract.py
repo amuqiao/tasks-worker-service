@@ -1,9 +1,11 @@
 from fastapi import APIRouter
 from fastapi.testclient import TestClient
 
+from app.core.config import AppSettings
 from app.core.context import REQUEST_ID_HEADER, TRACE_ID_HEADER
 from app.core.exceptions import AppError
 from app.core.lifecycle import HealthCheck, HealthCheckRegistry, HealthCheckResult
+from app.main import create_app
 
 
 def test_health_envelope_and_context_headers(app):
@@ -20,15 +22,48 @@ def test_health_envelope_and_context_headers(app):
     assert body["data"]["status"] == "ok"
 
 
-def test_ready_uses_health_registry(app):
-    with TestClient(app) as client:
+def test_ready_uses_health_registry(sqlite_app):
+    with TestClient(sqlite_app) as client:
         response = client.get("/ready")
 
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == "OK"
     assert body["data"]["status"] == "ok"
-    assert body["data"]["checks"][0]["name"] == "process"
+    check_names = {check["name"] for check in body["data"]["checks"]}
+    assert {"process", "postgres", "redis", "object_storage", "http_client"}.issubset(check_names)
+
+
+def test_ready_reports_postgres_connectivity_failure():
+    settings = AppSettings(
+        security={"service_api_key": "test-service-key", "disable_auth": False},
+        database={"url": "postgresql+asyncpg://postgres:postgres@127.0.0.1:1/fastapi_lite"},
+        storage={"backend": "disabled"},
+        observability={"access_log_enabled": False},
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        response = client.get("/ready")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["code"] == "DEPENDENCY_UNAVAILABLE"
+    postgres_check = next(check for check in body["details"]["checks"] if check["name"] == "postgres")
+    assert postgres_check["status"] == "failed"
+
+
+def test_ready_rejects_non_postgres_database_without_test_override(test_settings):
+    app = create_app(test_settings)
+
+    with TestClient(app) as client:
+        response = client.get("/ready")
+
+    assert response.status_code == 503
+    body = response.json()
+    postgres_check = next(check for check in body["details"]["checks"] if check["name"] == "postgres")
+    assert postgres_check["status"] == "failed"
+    assert postgres_check["details"]["reason"] == "non_postgres_database_url"
 
 
 def test_ready_returns_503_when_required_check_fails(app):

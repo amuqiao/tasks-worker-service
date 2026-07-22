@@ -10,7 +10,7 @@ from app.api.operations import operation_registry
 from app.core.error_registry import error_registry
 from app.core.lifecycle import build_health_registry
 from app.core.registry_checks import validate_operation_route_drift
-from app.main import create_app
+from app.main import build_lifecycle_provider_registry, create_app
 
 
 def main() -> int:
@@ -18,6 +18,8 @@ def main() -> int:
     operation_registry.validate()
     health_registry = build_health_registry()
     health_registry.validate()
+    lifecycle_registry = build_lifecycle_provider_registry()
+    lifecycle_registry.validate()
     validate_operation_route_drift(create_app())
     print("OK registries")
     return 0

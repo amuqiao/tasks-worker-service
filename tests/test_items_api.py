@@ -5,8 +5,8 @@ def auth_headers() -> dict[str, str]:
     return {"Authorization": "Bearer test-service-key"}
 
 
-def test_items_crud_flow(app, sqlite_session_factory):
-    with TestClient(app) as client:
+def test_items_crud_flow(sqlite_app):
+    with TestClient(sqlite_app) as client:
         created = client.post(
             "/v1/items",
             json={"name": "alpha", "description": "first", "status": "active"},
@@ -50,8 +50,8 @@ def test_items_crud_flow(app, sqlite_session_factory):
         assert missing.json()["code"] == "ITEM_NOT_FOUND"
 
 
-def test_item_name_conflict(app, sqlite_session_factory):
-    with TestClient(app) as client:
+def test_item_name_conflict(sqlite_app):
+    with TestClient(sqlite_app) as client:
         first = client.post("/v1/items", json={"name": "dup"}, headers=auth_headers())
         second = client.post("/v1/items", json={"name": "dup"}, headers=auth_headers())
 
@@ -60,8 +60,8 @@ def test_item_name_conflict(app, sqlite_session_factory):
     assert second.json()["code"] == "ITEM_NAME_CONFLICT"
 
 
-def test_item_version_conflict(app, sqlite_session_factory):
-    with TestClient(app) as client:
+def test_item_version_conflict(sqlite_app):
+    with TestClient(sqlite_app) as client:
         created = client.post("/v1/items", json={"name": "versioned"}, headers=auth_headers())
         item_id = created.json()["data"]["id"]
         conflict = client.patch(
@@ -74,8 +74,8 @@ def test_item_version_conflict(app, sqlite_session_factory):
     assert conflict.json()["code"] == "ITEM_VERSION_CONFLICT"
 
 
-def test_items_cursor_pagination(app, sqlite_session_factory):
-    with TestClient(app) as client:
+def test_items_cursor_pagination(sqlite_app):
+    with TestClient(sqlite_app) as client:
         first = client.post("/v1/items", json={"name": "one"}, headers=auth_headers()).json()["data"]
         second = client.post("/v1/items", json={"name": "two"}, headers=auth_headers()).json()["data"]
 
@@ -92,24 +92,24 @@ def test_items_cursor_pagination(app, sqlite_session_factory):
         assert {body1["items"][0]["id"], body2["items"][0]["id"]} == {first["id"], second["id"]}
 
 
-def test_items_invalid_cursor_returns_request_invalid(app, sqlite_session_factory):
-    with TestClient(app) as client:
+def test_items_invalid_cursor_returns_request_invalid(sqlite_app):
+    with TestClient(sqlite_app) as client:
         response = client.get("/v1/items", params={"cursor": "not-a-cursor"}, headers=auth_headers())
 
     assert response.status_code == 422
     assert response.json()["code"] == "REQUEST_INVALID"
 
 
-def test_items_invalid_status_returns_request_invalid(app, sqlite_session_factory):
-    with TestClient(app) as client:
+def test_items_invalid_status_returns_request_invalid(sqlite_app):
+    with TestClient(sqlite_app) as client:
         response = client.get("/v1/items", params={"status": "unknown"}, headers=auth_headers())
 
     assert response.status_code == 422
     assert response.json()["code"] == "REQUEST_INVALID"
 
 
-def test_soft_deleted_name_can_be_reused(app, sqlite_session_factory):
-    with TestClient(app) as client:
+def test_soft_deleted_name_can_be_reused(sqlite_app):
+    with TestClient(sqlite_app) as client:
         created = client.post("/v1/items", json={"name": "reuse"}, headers=auth_headers()).json()["data"]
         deleted = client.request(
             "DELETE",
@@ -124,8 +124,8 @@ def test_soft_deleted_name_can_be_reused(app, sqlite_session_factory):
     assert recreated.json()["data"]["id"] != created["id"]
 
 
-def test_items_requires_auth(app, sqlite_session_factory):
-    with TestClient(app) as client:
+def test_items_requires_auth(sqlite_app):
+    with TestClient(sqlite_app) as client:
         response = client.post("/v1/items", json={"name": "secure"})
 
     assert response.status_code == 401

@@ -1,14 +1,20 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.core.context import get_request_id, get_trace_id
+from app.db.unit_of_work import UnitOfWork
 from app.core.security import Principal, get_current_principal
 from app.schemas.envelope import success_envelope
 from app.schemas.item import ItemCreateRequest, ItemDeleteRequest, ItemStatus, ItemUpdateRequest
-from app.services.item_service import ItemService, get_item_service
+from app.services.item_service import ItemService
 
 router = APIRouter(tags=["items"])
+
+
+def get_item_service(request: Request) -> ItemService:
+    session_factory = request.app.state.db_session_factory
+    return ItemService(lambda: UnitOfWork(session_factory))
 
 
 @router.post("/items", operation_id="create_item", status_code=status.HTTP_201_CREATED)
