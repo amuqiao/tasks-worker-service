@@ -167,6 +167,7 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = "==2.0.50" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.49.0" },
 ]
+provides-extras = ["redis", "storage-s3", "worker-taskiq", "worker-celery", "metrics"]
 
 [package.metadata.requires-dev]
 dev = [

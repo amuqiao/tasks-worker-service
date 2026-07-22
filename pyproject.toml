@@ -15,6 +15,15 @@ dependencies = [
     "httpx==0.28.1",
 ]
 
+[project.optional-dependencies]
+# Optional runtime capability groups. Keep them empty in the skeleton until a
+# real service enables and verifies the adapter dependencies.
+redis = []
+storage-s3 = []
+worker-taskiq = []
+worker-celery = []
+metrics = []
+
 [dependency-groups]
 dev = [
     "pytest==9.0.3",
