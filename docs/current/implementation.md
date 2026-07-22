@@ -25,9 +25,11 @@ FastAPI app 由 `app.main.create_app()` 创建。`lifespan` 在启动期构建 h
 - `/ready` 聚合 `process`、`postgres`、`redis`、`object_storage`、`http_client` checks。
 - 响应统一使用 success/error envelope。
 - `X-Request-ID` 和 `X-Trace-ID` 会被生成、校验、透传并写回响应 header。
+- `RequestContextMiddleware` 负责 request/trace header 校验、context 注入、响应 header 回写和 access log。`create_app()` 显式安装 `RequestContextMiddleware` 和 `CORSMiddleware`。
 - `RequestValidationError` 映射为 `REQUEST_INVALID`。
 - `AppError` 通过 error registry 映射为注册错误码。
 - 未捕获异常映射为 `INTERNAL_ERROR`，响应不暴露内部异常细节。
+- access log、`AppError` log 和未捕获异常 log 都带稳定字段：`request_id`、`trace_id`、`method`、`path`、`operation_id`、`status`、`duration_ms`、`error_code`。
 - operation registry 记录 method、未挂载 path、operation id、成功状态码、auth 要求、route-specific 业务错误码和 schema 名称。业务 route 的公开路径由 `SERVICE__API_PREFIX` 渲染，避免在 registry、router 和文档中重复硬编码 `/v1`。
 - registry drift check 会校验 route method/path/operation id/成功状态码、OpenAPI request schema、OpenAPI error response、OpenAPI security、已注册错误码，以及 `docs/contracts/api-contract.md` 的 Routes 表关键字段。
 
@@ -70,6 +72,8 @@ route
 `items` 使用 soft delete、乐观并发 `version`、活动记录部分唯一约束、cursor pagination 和 repository mutation result。普通测试使用 SQLite in-memory session override；PostgreSQL integration 测试必须显式通过 `./scripts/verify.sh postgres` 启用，并由 `_test` 数据库保护。
 
 `app.models` 是 ORM metadata 的显式注册入口。Alembic env、SQLite 测试建表和 migration roundtrip 都通过导入 `app.models` 触发已注册模型加载，再使用 `Base.metadata` 作为表集合来源。`scripts/verify/migration_roundtrip.py` 的 head schema 断言按 registered metadata 表集合校验，不硬编码 `items`。
+
+`UnitOfWork` 必须显式接收 `session_factory`，业务 service 必须由 route、worker 或测试这样的 composition root 注入 `UowFactory`。HTTP route 从 `request.app.state.db_session_factory` 构造 `UowFactory`，避免 service 或 repository 隐式依赖进程级全局数据库状态。
 
 ## Providers
 

@@ -21,6 +21,7 @@ Rules:
 
 - Route 负责 HTTP dependency、envelope 和 status code。
 - Service 负责事务编排和业务错误映射。
+- Service 构造函数必须接收显式 `UowFactory`；不要在 service 内部直接创建 `UnitOfWork()` 或读取全局数据库状态。
 - Repository 负责 SQLAlchemy 查询，不提交事务。
 - Model 和 migration 必须同步。
 - 新 ORM model 必须导入并登记到 `app/models/__init__.py`；Alembic、测试建表和 migration roundtrip 以 registered metadata 为验收来源。
@@ -28,6 +29,19 @@ Rules:
 - operation registry 条目必须包含 method、未挂载 path、operation id、成功状态码、auth 要求、route-specific 业务错误码和 schema 名称。业务 API 的公开路径由 `SERVICE__API_PREFIX` 渲染。
 - route decorator 必须声明 `response_model`，并使用 `operation_responses(<operation_id>)` 声明注册错误响应。
 - 新业务错误码必须登记到 `app/core/error_registry.py`。
+
+Minimum checklist:
+
+- Add request/response schema in `app/schemas/<resource>.py`.
+- Add route in `app/api/routes/<resource>.py` and include it from `app.main.create_app()`.
+- Add operation metadata in `app/api/operations.py`.
+- Add business error codes in `app/core/error_registry.py`.
+- Add service and repository modules.
+- Add ORM model and register it in `app/models/__init__.py`.
+- Add Alembic migration.
+- Add API and service tests.
+- Update `docs/contracts/api-contract.md` Routes table.
+- Run `./scripts/verify.sh check`; run PostgreSQL gates when migrations or PostgreSQL-specific behavior changed.
 
 ## Adding Configuration
 
@@ -42,6 +56,20 @@ Required steps:
 5. Add or update config tests.
 
 Providers must consume typed settings objects. They must not read `os.environ` directly.
+
+## Adding Middleware
+
+Middleware is only for cross-request HTTP concerns such as request context, CORS, access log, metrics, rate limit, body-size guard, or trusted host checks. Do not put business rules, database transactions, provider lifecycle, or route-specific authorization into middleware.
+
+Rules:
+
+- Middleware must be explicitly installed in `app.main.create_app()`; the skeleton does not use middleware auto-discovery or a middleware registry.
+- If middleware needs configuration, read typed `AppSettings` sections. Do not read `os.environ` directly.
+- Middleware constructors must not create network, database, file, or HTTP client resources. External resources must be attached through lifecycle providers and accessed from typed `app.state` getters during requests.
+- Middleware that depends on `request_id` or `trace_id` must document its install order and have tests proving context headers, envelope fields, and log context still work.
+- Middleware must not swallow exceptions or return bare JSON. Early responses must use registered error codes, the common error envelope, and must write `X-Request-ID` / `X-Trace-ID`.
+- New caller-visible HTTP behavior must be reflected in `docs/contracts/api-contract.md`; internal engineering rules belong in this document.
+- Add tests for normal pass-through and for the middleware's early-return or failure path.
 
 ## Adding A Provider
 
@@ -92,6 +120,7 @@ For every new route:
 - Add API tests for success and route-specific business errors.
 - Keep response envelope shape unchanged.
 - Use registered `AppError` codes for business failures.
+- Access and error logs must preserve `request_id`, `trace_id`, `method`, `path`, `operation_id`, `status`, `duration_ms`, and `error_code` fields.
 - Keep `docs/contracts/api-contract.md` Routes table aligned with operation registry; `./scripts/verify.sh registry` checks this drift.
 - Run `./scripts/verify.sh check`.
 

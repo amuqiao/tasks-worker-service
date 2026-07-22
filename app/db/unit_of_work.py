@@ -2,13 +2,12 @@ from collections.abc import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.db.database import get_session_factory
 from app.repositories.item_repository import ItemRepository
 
 
 class UnitOfWork:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession] | None = None) -> None:
-        self._session_factory = session_factory or get_session_factory()
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory = session_factory
         self.session: AsyncSession | None = None
         self.items: ItemRepository | None = None
 
@@ -40,6 +39,5 @@ class UnitOfWork:
 UowFactory = Callable[[], UnitOfWork]
 
 
-def default_uow_factory() -> UnitOfWork:
-    return UnitOfWork()
-
+def uow_factory_from_session_factory(session_factory: async_sessionmaker[AsyncSession]) -> UowFactory:
+    return lambda: UnitOfWork(session_factory)

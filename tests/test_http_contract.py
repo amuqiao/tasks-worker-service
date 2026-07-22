@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter
 from fastapi.testclient import TestClient
 
@@ -6,6 +8,22 @@ from app.core.context import REQUEST_ID_HEADER, TRACE_ID_HEADER
 from app.core.exceptions import AppError
 from app.core.lifecycle import HealthCheck, HealthCheckRegistry, HealthCheckResult
 from app.main import create_app
+
+
+class ListHandler(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def attach_log_recorder(app) -> ListHandler:
+    handler = ListHandler()
+    logging.getLogger().addHandler(handler)
+    app.state.test_log_handler = handler
+    return handler
 
 
 def test_health_envelope_and_context_headers(app):
@@ -192,3 +210,100 @@ def test_openapi_exposes_route_contract(app):
 
     health = schema["paths"]["/health"]["get"]
     assert "security" not in health
+
+
+def test_access_log_exposes_stable_fields(test_settings):
+    settings = AppSettings(
+        security={"service_api_key": "test-service-key", "disable_auth": False},
+        database={"url": "sqlite+aiosqlite:///:memory:"},
+        storage={"backend": "disabled"},
+        observability={"access_log_enabled": True, "health_access_log": True},
+    )
+    app = create_app(settings)
+    handler = attach_log_recorder(app)
+
+    with TestClient(app) as client:
+        response = client.get("/health", headers={REQUEST_ID_HEADER: "req-log", TRACE_ID_HEADER: "trace-log"})
+
+    assert response.status_code == 200
+    record = next(item for item in handler.records if item.getMessage() == "request_completed")
+    assert record.request_id == "req-log"
+    assert record.trace_id == "trace-log"
+    assert record.method == "GET"
+    assert record.path == "/health"
+    assert record.operation_id == "health"
+    assert record.status == 200
+    assert isinstance(record.duration_ms, int)
+
+
+def test_invalid_header_access_log_exposes_stable_fields(test_settings):
+    settings = AppSettings(
+        security={"service_api_key": "test-service-key", "disable_auth": False},
+        database={"url": "sqlite+aiosqlite:///:memory:"},
+        storage={"backend": "disabled"},
+        observability={"access_log_enabled": True},
+    )
+    app = create_app(settings)
+    handler = attach_log_recorder(app)
+    router = APIRouter()
+
+    @router.get("/_test/context", operation_id="context")
+    async def context_route():
+        return {"ok": True}
+
+    app.include_router(router)
+
+    with TestClient(app) as client:
+        response = client.get("/_test/context", headers={REQUEST_ID_HEADER: "bad id with spaces"})
+
+    assert response.status_code == 422
+    record = next(item for item in handler.records if item.getMessage() == "request_completed")
+    assert record.method == "GET"
+    assert record.path == "/_test/context"
+    assert record.operation_id == "-"
+    assert record.status == 422
+    assert isinstance(record.duration_ms, int)
+
+
+def test_invalid_health_header_respects_health_access_log(test_settings):
+    settings = AppSettings(
+        security={"service_api_key": "test-service-key", "disable_auth": False},
+        database={"url": "sqlite+aiosqlite:///:memory:"},
+        storage={"backend": "disabled"},
+        observability={"access_log_enabled": True, "health_access_log": False},
+    )
+    app = create_app(settings)
+    handler = attach_log_recorder(app)
+
+    with TestClient(app) as client:
+        response = client.get("/health", headers={REQUEST_ID_HEADER: "bad id with spaces"})
+
+    assert response.status_code == 422
+    assert not [item for item in handler.records if item.getMessage() == "request_completed"]
+
+
+def test_app_error_log_exposes_stable_fields(test_settings):
+    app = create_app(test_settings)
+    handler = attach_log_recorder(app)
+    router = APIRouter()
+
+    @router.get("/_test/logged-app-error", operation_id="logged_app_error")
+    async def raise_app_error():
+        raise AppError("FORBIDDEN")
+
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.get(
+            "/_test/logged-app-error",
+            headers={REQUEST_ID_HEADER: "req-error", TRACE_ID_HEADER: "trace-error"},
+        )
+
+    assert response.status_code == 403
+    record = next(item for item in handler.records if item.getMessage() == "app_error")
+    assert record.request_id == "req-error"
+    assert record.trace_id == "trace-error"
+    assert record.method == "GET"
+    assert record.path == "/_test/logged-app-error"
+    assert record.operation_id == "logged_app_error"
+    assert record.status == 403
+    assert record.error_code == "FORBIDDEN"

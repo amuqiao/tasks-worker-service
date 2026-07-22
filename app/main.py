@@ -16,7 +16,7 @@ from app.core.context import get_request_id, get_trace_id
 from app.core.exceptions import AppError
 from app.core.lifecycle import LifecycleProviderRegistry, build_health_registry
 from app.core.logging import configure_logging
-from app.core.middleware import RequestContextMiddleware
+from app.core.middleware import RequestContextMiddleware, operation_id_for_request
 from app.integrations.http_client import HttpClientProvider
 from app.integrations.postgres import PostgresProvider
 from app.integrations.redis import RedisProvider
@@ -60,6 +60,17 @@ def _trace_id(request: Request) -> str:
     return getattr(request.state, "trace_id", get_trace_id())
 
 
+def _log_extra(request: Request, *, status: int, error_code: str) -> dict[str, object]:
+    return {
+        "method": request.method,
+        "path": request.url.path,
+        "operation_id": operation_id_for_request(request),
+        "status": status,
+        "duration_ms": "-",
+        "error_code": error_code,
+    }
+
+
 def install_exception_handlers(application: FastAPI) -> None:
     @application.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
@@ -69,6 +80,7 @@ def install_exception_handlers(application: FastAPI) -> None:
             trace_id=_trace_id(request),
             details=exc.details,
         )
+        logger.warning("app_error", extra=_log_extra(request, status=status_code, error_code=exc.code))
         return JSONResponse(status_code=status_code, content=jsonable_encoder(body))
 
     @application.exception_handler(RequestValidationError)
@@ -103,11 +115,14 @@ def install_exception_handlers(application: FastAPI) -> None:
 
     @application.exception_handler(Exception)
     async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
-        logger.exception("unhandled_exception method=%s path=%s", request.method, request.url.path)
         status_code, body = error_envelope(
             "INTERNAL_ERROR",
             request_id=_request_id(request),
             trace_id=_trace_id(request),
+        )
+        logger.exception(
+            "unhandled_exception",
+            extra=_log_extra(request, status=status_code, error_code="INTERNAL_ERROR"),
         )
         return JSONResponse(status_code=status_code, content=jsonable_encoder(body))
 

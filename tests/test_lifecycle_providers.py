@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import AppSettings
 from app.core.lifecycle import HealthCheckRegistry, LifecycleProviderRegistry
-from app.db.database import clear_session_factory, configure_session_factory, current_session_factory
+from app.db.database import current_session_factory
 from app.db.unit_of_work import UnitOfWork
 from app.integrations.http_client import get_http_client
 from app.integrations.redis import get_redis_client
@@ -118,15 +118,9 @@ def test_parallel_app_lifespans_do_not_share_database_state(test_settings):
         assert first_client.app.state.db_session_factory is first_factory
 
 
-def test_unit_of_work_requires_started_database_provider():
-    previous = current_session_factory()
-    clear_session_factory()
-    try:
-        with pytest.raises(RuntimeError, match="database session factory is not initialized"):
-            UnitOfWork()
-    finally:
-        if previous is not None:
-            configure_session_factory(previous)
+def test_unit_of_work_requires_explicit_session_factory():
+    with pytest.raises(TypeError):
+        UnitOfWork()
 
 
 def test_redis_enabled_is_explicitly_unsupported_in_phase_3():

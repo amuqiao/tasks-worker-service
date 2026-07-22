@@ -1,13 +1,18 @@
 import pytest
 
 from app.core.exceptions import AppError
-from app.db.unit_of_work import UnitOfWork
+from app.db.unit_of_work import uow_factory_from_session_factory
 from app.schemas.item import ItemCreateRequest, ItemUpdateRequest
 from app.services.item_service import ItemService
 
 
 def service(sqlite_session_factory) -> ItemService:
-    return ItemService(lambda: UnitOfWork(sqlite_session_factory))
+    return ItemService(uow_factory_from_session_factory(sqlite_session_factory))
+
+
+def test_item_service_requires_explicit_uow_factory():
+    with pytest.raises(TypeError):
+        ItemService()
 
 
 @pytest.mark.asyncio
@@ -35,4 +40,3 @@ async def test_service_rejects_stale_update(sqlite_session_factory):
         )
 
     assert exc.value.code == "ITEM_VERSION_CONFLICT"
-

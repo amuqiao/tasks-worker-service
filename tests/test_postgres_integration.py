@@ -8,7 +8,7 @@ from sqlalchemy import delete
 
 from app.core.exceptions import AppError
 from app.db.database import close_db_engine, get_session_factory, init_db_engine
-from app.db.unit_of_work import UnitOfWork
+from app.db.unit_of_work import uow_factory_from_session_factory
 from app.models.item import Item
 from app.schemas.item import ItemCreateRequest, ItemDeleteRequest, ItemUpdateRequest
 from app.services.item_service import ItemService
@@ -30,7 +30,7 @@ async def postgres_uow_factory():
         await session.execute(delete(Item))
         await session.commit()
     try:
-        yield lambda: UnitOfWork(factory)
+        yield uow_factory_from_session_factory(factory)
     finally:
         async with factory() as session:
             await session.execute(delete(Item))

@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import AppError
-from app.db.unit_of_work import UowFactory, default_uow_factory
+from app.db.unit_of_work import UowFactory
 from app.models.item import Item
 from app.schemas.item import ItemCreateRequest, ItemDeleteRequest, ItemListResponse, ItemResponse, ItemStatus, ItemUpdateRequest
 
@@ -31,7 +31,7 @@ def item_to_response(item: Item) -> ItemResponse:
 
 
 class ItemService:
-    def __init__(self, uow_factory: UowFactory = default_uow_factory) -> None:
+    def __init__(self, uow_factory: UowFactory) -> None:
         self._uow_factory = uow_factory
 
     async def create_item(self, *, owner_id: str, data: ItemCreateRequest) -> ItemResponse:
