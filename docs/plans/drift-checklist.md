@@ -19,7 +19,7 @@
 - provider retry / backoff / bulkhead。
 - OpenTelemetry / Prometheus 接入。
 - Tool Catalog，仅当多个服务确实需要跨模块工具发现时再做。
-- 更完整的本地依赖管理脚本，例如 Postgres / Redis compose lifecycle、storage 初始化和一键迁移。
+- 更完整的本地依赖管理脚本，例如 Postgres / Redis compose lifecycle 和 storage 初始化。
 
 ## Change Checklist
 
@@ -30,6 +30,7 @@
 - [ ] 新配置 key 已同步 `sections.py`、`env_manifest.py`、`.env.example` 和测试。
 - [ ] 新 provider 通过 lifecycle registry 启动、ready 和关闭。
 - [ ] 新工具放在 `app/tools/`，并有 schema、metadata 和测试。
+- [ ] 新脚本子命令已同步 help、`scripts/README.md` 和脚本 smoke 测试。
 - [ ] README 和 `docs/current/` 没有描述未实现行为。
 - [ ] `docs/contracts/` 只写调用者或开发者可依赖的稳定合同。
 - [ ] 未完成内容只留在 `docs/plans/`。

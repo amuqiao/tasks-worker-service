@@ -104,3 +104,21 @@ If the extension changes migrations or Postgres-specific behavior, also run:
 ```bash
 ./scripts/verify.sh postgres
 ```
+
+## Adding Script Commands
+
+新脚本能力优先扩展现有入口：
+
+- 本地开发生命周期、端口、迁移和环境检查归 `scripts/dev.sh`。
+- 一次性验证归 `scripts/verify.sh`。
+- 部署形态和 compose 接入归 `scripts/deploy.sh`。
+- 公共 shell helper 放在 `scripts/lib/`。
+- 结构化或复杂解析优先用 Python helper，例如 `scripts/dev/check_ports.py`。
+
+Rules:
+
+- 顶层入口必须有 `Usage`、职责、输出、副作用与保护边界、常用示例和 `Exit Codes`。
+- 未知命令必须返回 `2`。
+- 默认人读输出走 stdout；错误和诊断走 stderr。
+- 机器读输出必须显式启用，并保持 stdout 为单一 JSON 文档。
+- 不要把业务命令、模型命令、media 命令或远端生产运维命令放进基础骨架。

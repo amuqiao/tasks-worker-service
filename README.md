@@ -14,6 +14,7 @@
 - lifecycle providers：Postgres、Redis fake boundary、object storage、shared HTTP client。
 - `app/tools/` 示例工具模块。
 - `dev.sh`、`deploy.sh`、`verify.sh` 脚本入口。
+- 脚本公共能力：`doctor`、端口扫描、PID/log 管理、迁移入口、registry/env/docs drift gate。
 
 ## Quick Start
 
@@ -35,10 +36,22 @@ Show local development commands:
 ./scripts/dev.sh help
 ```
 
+Check the local development environment:
+
+```bash
+./scripts/dev.sh doctor
+```
+
+Scan common local ports:
+
+```bash
+./scripts/dev.sh ports 8100 25432 26379
+```
+
 Run the API locally:
 
 ```bash
-./scripts/dev.sh start
+./scripts/dev.sh start api
 ```
 
 The app process can start without opening a database connection, but `/ready` and the `items` API require a reachable PostgreSQL database unless tests inject a session override.
@@ -49,6 +62,7 @@ The app process can start without opening a database connection, but `/ready` an
 - HTTP API contract: [`docs/contracts/api-contract.md`](docs/contracts/api-contract.md)
 - Extension contract: [`docs/contracts/extension-contract.md`](docs/contracts/extension-contract.md)
 - Drift checklist and P1 plan: [`docs/plans/drift-checklist.md`](docs/plans/drift-checklist.md)
+- Scripts contract: [`scripts/README.md`](scripts/README.md)
 - Original skeleton target: [`docs/FastAPI服务骨架.md`](docs/FastAPI服务骨架.md)
 
 ## Verification
