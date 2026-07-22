@@ -47,7 +47,7 @@ class RedisProvider:
 
     async def startup(self, app: FastAPI, settings: AppSettings) -> RedisClient:
         if settings.redis.enabled:
-            raise RuntimeError("real Redis provider is not implemented in phase 3")
+            raise RuntimeError("real Redis provider is not implemented in the current skeleton")
         client = FakeRedisClient()
         app.state.redis = client
         return client

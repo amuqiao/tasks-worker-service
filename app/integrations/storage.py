@@ -78,7 +78,7 @@ class ObjectStorageProvider:
         elif settings.storage.backend == "local":
             storage = LocalObjectStorage(Path(settings.storage.local_path))
         else:
-            raise RuntimeError("s3_compatible storage adapter is not implemented in phase 3")
+            raise RuntimeError("s3_compatible storage adapter is not implemented in the current skeleton")
         app.state.object_storage = storage
         return storage
 

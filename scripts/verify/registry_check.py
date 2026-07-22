@@ -11,6 +11,14 @@ from app.core.error_registry import error_registry
 from app.core.lifecycle import build_health_registry
 from app.core.registry_checks import validate_operation_route_drift
 from app.main import build_lifecycle_provider_registry, create_app
+from app.tools.example_tool import validate_example_tool_spec
+
+REQUIRED_DOCS = (
+    ROOT_DIR / "docs/current/implementation.md",
+    ROOT_DIR / "docs/contracts/api-contract.md",
+    ROOT_DIR / "docs/contracts/extension-contract.md",
+    ROOT_DIR / "docs/plans/drift-checklist.md",
+)
 
 
 def main() -> int:
@@ -20,6 +28,10 @@ def main() -> int:
     health_registry.validate()
     lifecycle_registry = build_lifecycle_provider_registry()
     lifecycle_registry.validate()
+    validate_example_tool_spec()
+    missing_docs = [str(path.relative_to(ROOT_DIR)) for path in REQUIRED_DOCS if not path.is_file()]
+    if missing_docs:
+        raise RuntimeError(f"required docs are missing: {missing_docs}")
     validate_operation_route_drift(create_app())
     print("OK registries")
     return 0

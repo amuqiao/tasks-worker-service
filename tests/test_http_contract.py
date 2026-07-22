@@ -83,6 +83,23 @@ def test_ready_returns_503_when_required_check_fails(app):
     assert body["details"]["status"] == "failed"
 
 
+def test_ready_returns_degraded_200_when_optional_check_fails(app):
+    async def fail_check():
+        return HealthCheckResult(name="cache", status="failed", details={"reason": "down"})
+
+    registry = HealthCheckRegistry()
+    registry.register(HealthCheck(name="cache", check=fail_check, required=False))
+    registry.freeze()
+    with TestClient(app) as client:
+        client.app.state.health_checks = registry
+        response = client.get("/ready")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == "OK"
+    assert body["data"]["status"] == "degraded"
+
+
 def test_invalid_request_id_returns_error_envelope(app):
     with TestClient(app) as client:
         response = client.get("/health", headers={REQUEST_ID_HEADER: "bad id with spaces"})

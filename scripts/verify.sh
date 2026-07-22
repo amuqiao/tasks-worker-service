@@ -9,7 +9,7 @@ usage() {
 Usage: ./scripts/verify.sh <command>
 
 Commands:
-  check       Run all phase-1 checks
+  check       Run the default skeleton verification gate
   env         Check env manifest and .env.example
   registry    Check registry invariants
   syntax      Compile Python sources
