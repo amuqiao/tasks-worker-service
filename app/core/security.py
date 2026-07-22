@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 
-from fastapi import Depends, Header
+from fastapi import Header, Request
 
-from app.core.config import AppSettings, get_settings
 from app.core.exceptions import AppError
 
 
@@ -12,13 +11,13 @@ class Principal:
 
 
 def get_current_principal(
+    request: Request,
     authorization: str | None = Header(default=None, alias="Authorization"),
-    settings: AppSettings = Depends(get_settings),
 ) -> Principal:
+    settings = request.app.state.settings
     if settings.security.disable_auth:
         return Principal(subject="dev")
     expected = f"Bearer {settings.security.service_api_key_value}"
     if authorization != expected:
         raise AppError("UNAUTHORIZED")
     return Principal(subject="service")
-

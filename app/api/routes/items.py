@@ -1,0 +1,75 @@
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, status
+
+from app.core.context import get_request_id, get_trace_id
+from app.core.security import Principal, get_current_principal
+from app.schemas.envelope import success_envelope
+from app.schemas.item import ItemCreateRequest, ItemDeleteRequest, ItemStatus, ItemUpdateRequest
+from app.services.item_service import ItemService, get_item_service
+
+router = APIRouter(tags=["items"])
+
+
+@router.post("/items", operation_id="create_item", status_code=status.HTTP_201_CREATED)
+async def create_item(
+    data: ItemCreateRequest,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    service: Annotated[ItemService, Depends(get_item_service)],
+) -> object:
+    item = await service.create_item(owner_id=principal.subject, data=data)
+    return success_envelope(item, request_id=get_request_id(), trace_id=get_trace_id())
+
+
+@router.get("/items/{item_id}", operation_id="get_item")
+async def get_item(
+    item_id: str,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    service: Annotated[ItemService, Depends(get_item_service)],
+) -> object:
+    item = await service.get_item(owner_id=principal.subject, item_id=item_id)
+    return success_envelope(item, request_id=get_request_id(), trace_id=get_trace_id())
+
+
+@router.get("/items", operation_id="list_items")
+async def list_items(
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    service: Annotated[ItemService, Depends(get_item_service)],
+    item_status: Annotated[ItemStatus | None, Query(alias="status")] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: str | None = None,
+) -> object:
+    page = await service.list_items(
+        owner_id=principal.subject,
+        status=item_status,
+        limit=limit,
+        cursor=cursor,
+    )
+    return success_envelope(page, request_id=get_request_id(), trace_id=get_trace_id())
+
+
+@router.patch("/items/{item_id}", operation_id="update_item")
+async def update_item(
+    item_id: str,
+    data: ItemUpdateRequest,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    service: Annotated[ItemService, Depends(get_item_service)],
+) -> object:
+    item = await service.update_item(owner_id=principal.subject, item_id=item_id, data=data)
+    return success_envelope(item, request_id=get_request_id(), trace_id=get_trace_id())
+
+
+@router.delete("/items/{item_id}", operation_id="delete_item")
+async def delete_item(
+    item_id: str,
+    data: ItemDeleteRequest,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+    service: Annotated[ItemService, Depends(get_item_service)],
+) -> object:
+    item = await service.delete_item(
+        owner_id=principal.subject,
+        item_id=item_id,
+        data=data,
+        deleted_by=principal.subject,
+    )
+    return success_envelope(item, request_id=get_request_id(), trace_id=get_trace_id())

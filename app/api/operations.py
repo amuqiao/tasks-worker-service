@@ -36,6 +36,26 @@ class OperationRegistry:
 operation_registry = OperationRegistry()
 operation_registry.register(OperationSpec("health", "GET", "/health", 200, frozenset()))
 operation_registry.register(OperationSpec("ready", "GET", "/ready", 200, frozenset({"DEPENDENCY_UNAVAILABLE"})))
+operation_registry.register(OperationSpec("create_item", "POST", "/v1/items", 201, frozenset({"ITEM_NAME_CONFLICT"})))
+operation_registry.register(OperationSpec("get_item", "GET", "/v1/items/{item_id}", 200, frozenset({"ITEM_NOT_FOUND"})))
+operation_registry.register(OperationSpec("list_items", "GET", "/v1/items", 200, frozenset({"REQUEST_INVALID"})))
+operation_registry.register(
+    OperationSpec(
+        "update_item",
+        "PATCH",
+        "/v1/items/{item_id}",
+        200,
+        frozenset({"ITEM_NOT_FOUND", "ITEM_NAME_CONFLICT", "ITEM_VERSION_CONFLICT"}),
+    )
+)
+operation_registry.register(
+    OperationSpec(
+        "delete_item",
+        "DELETE",
+        "/v1/items/{item_id}",
+        200,
+        frozenset({"ITEM_NOT_FOUND", "ITEM_VERSION_CONFLICT"}),
+    )
+)
 operation_registry.validate()
 operation_registry.freeze()
-

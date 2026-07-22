@@ -51,6 +51,9 @@ def _register_defaults() -> None:
         ErrorSpec("RESOURCE_CONFLICT", 409, "Resource conflict.", False, frozenset({"public", "internal"})),
         ErrorSpec("DEPENDENCY_UNAVAILABLE", 503, "Dependency is unavailable.", True, frozenset({"public", "internal"})),
         ErrorSpec("INTERNAL_ERROR", 500, "Internal server error.", True, frozenset({"public", "internal"})),
+        ErrorSpec("ITEM_NOT_FOUND", 404, "Item not found.", False, frozenset({"public"})),
+        ErrorSpec("ITEM_NAME_CONFLICT", 409, "Item name already exists.", False, frozenset({"public"})),
+        ErrorSpec("ITEM_VERSION_CONFLICT", 409, "Item version conflict.", False, frozenset({"public"})),
     ]
     for spec in specs:
         error_registry.register(spec)
