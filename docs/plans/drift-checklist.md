@@ -5,7 +5,9 @@
 ## Current Baseline
 
 - Foundation、HTTP envelope、error registry、operation registry、health registry 和 lifecycle provider registry 已实现。
+- registry gate 已覆盖 route/OpenAPI/docs Routes 表的关键 HTTP 合同漂移。
 - `items` 示例 CRUD、repository、UnitOfWork、migration 和测试已实现。
+- `app.models` 是 ORM metadata 注册入口；migration roundtrip 按 registered metadata 表集合检查。
 - Postgres provider、Redis fake boundary、object storage `disabled/local`、shared HTTP client provider 已接入 lifespan。
 - `app/tools/example_tool.py` 已作为工具模块范式示例。
 - `./scripts/verify.sh check` 是默认验收入口。
@@ -25,8 +27,11 @@
 
 代码改动后检查：
 
-- [ ] 新 route 已登记到 `app/api/operations.py`，并包含状态码、route-specific 业务错误码和 schema 名称。
+- [ ] 新 route 已登记到 `app/api/operations.py`，并包含未挂载 path、状态码、auth 要求、route-specific 业务错误码和 schema 名称。
+- [ ] 新 route decorator 已声明 `response_model` 和 `operation_responses()`。
+- [ ] `docs/contracts/api-contract.md` Routes 表与 operation registry 保持一致。
 - [ ] 新错误码已登记到 `app/core/error_registry.py`。
+- [ ] 新 ORM model 已登记到 `app/models/__init__.py`，并有同步 migration。
 - [ ] 新配置 key 已同步 `sections.py`、`env_manifest.py`、`.env.example` 和测试。
 - [ ] 新 provider 通过 lifecycle registry 启动、ready 和关闭。
 - [ ] 新工具放在 `app/tools/`，并有 schema、metadata 和测试。

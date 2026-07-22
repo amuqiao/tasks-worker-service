@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from typing import Annotated
 
-from fastapi import Header, Request
+from fastapi import Request, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.exceptions import AppError
 
@@ -10,14 +12,20 @@ class Principal:
     subject: str
 
 
+service_bearer = HTTPBearer(auto_error=False)
+
+
 def get_current_principal(
     request: Request,
-    authorization: str | None = Header(default=None, alias="Authorization"),
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Security(service_bearer)] = None,
 ) -> Principal:
     settings = request.app.state.settings
     if settings.security.disable_auth:
         return Principal(subject="dev")
-    expected = f"Bearer {settings.security.service_api_key_value}"
-    if authorization != expected:
+    if (
+        credentials is None
+        or credentials.scheme.lower() != "bearer"
+        or credentials.credentials != settings.security.service_api_key_value
+    ):
         raise AppError("UNAUTHORIZED")
     return Principal(subject="service")

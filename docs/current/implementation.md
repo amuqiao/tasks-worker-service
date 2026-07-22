@@ -28,7 +28,8 @@ FastAPI app 由 `app.main.create_app()` 创建。`lifespan` 在启动期构建 h
 - `RequestValidationError` 映射为 `REQUEST_INVALID`。
 - `AppError` 通过 error registry 映射为注册错误码。
 - 未捕获异常映射为 `INTERNAL_ERROR`，响应不暴露内部异常细节。
-- operation registry 记录 method、path、operation id、成功状态码、route-specific 业务错误码和 schema 名称。当前 drift check 会校验 method、path、operation id 和成功状态码；错误码和 schema 名称由 registry metadata 与文档约束维护。
+- operation registry 记录 method、未挂载 path、operation id、成功状态码、auth 要求、route-specific 业务错误码和 schema 名称。业务 route 的公开路径由 `SERVICE__API_PREFIX` 渲染，避免在 registry、router 和文档中重复硬编码 `/v1`。
+- registry drift check 会校验 route method/path/operation id/成功状态码、OpenAPI request schema、OpenAPI error response、OpenAPI security、已注册错误码，以及 `docs/contracts/api-contract.md` 的 Routes 表关键字段。
 
 ## Configuration
 
@@ -67,6 +68,8 @@ route
 - `DELETE /v1/items/{item_id}`
 
 `items` 使用 soft delete、乐观并发 `version`、活动记录部分唯一约束、cursor pagination 和 repository mutation result。普通测试使用 SQLite in-memory session override；PostgreSQL integration 测试必须显式通过 `./scripts/verify.sh postgres` 启用，并由 `_test` 数据库保护。
+
+`app.models` 是 ORM metadata 的显式注册入口。Alembic env、SQLite 测试建表和 migration roundtrip 都通过导入 `app.models` 触发已注册模型加载，再使用 `Base.metadata` 作为表集合来源。`scripts/verify/migration_roundtrip.py` 的 head schema 断言按 registered metadata 表集合校验，不硬编码 `items`。
 
 ## Providers
 

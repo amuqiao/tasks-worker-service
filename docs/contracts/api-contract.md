@@ -40,6 +40,8 @@
 
 ## Routes
 
+下表使用默认 `SERVICE__API_PREFIX=/v1` 展示公开路径。代码中的 operation registry 保存未挂载业务路径，例如 `/items`；运行时由 `SERVICE__API_PREFIX` 渲染成公开路径。
+
 | Operation | Method / Path | Auth | Success | Stable Errors |
 |---|---|---|---|---|
 | `health` | `GET /health` | no | `200` | none |
@@ -149,4 +151,4 @@ List response data:
 
 ## Compatibility
 
-The public API prefix is configured by `SERVICE__API_PREFIX` and defaults to `/v1`. `./scripts/verify.sh check` verifies mounted route method/path/operation id/success status drift, registered error code validity, required docs, env config, migrations, scripts, and tests. Envelope fields, route-specific error sets, and schema names are stable contract surfaces maintained by registry metadata, tests, and this document.
+The public API prefix is configured by `SERVICE__API_PREFIX` and defaults to `/v1`. `./scripts/verify.sh check` verifies mounted route method/path/operation id/success status drift, OpenAPI request schema/error response/security metadata, registered error code validity, API contract route table drift, required docs, env config, migrations, scripts, and tests. Envelope fields, route-specific error sets, and schema names are stable contract surfaces maintained by registry metadata, tests, and this document.

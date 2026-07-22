@@ -174,3 +174,21 @@ def test_method_not_allowed_preserves_http_status(app):
 
     assert response.status_code == 405
     assert response.json()["code"] == "REQUEST_INVALID"
+
+
+def test_openapi_exposes_route_contract(app):
+    schema = app.openapi()
+
+    create_item = schema["paths"]["/v1/items"]["post"]
+    assert create_item["operationId"] == "create_item"
+    assert create_item["security"]
+    assert "HTTPBearer" in schema["components"]["securitySchemes"]
+    assert create_item["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith("/ItemCreateRequest")
+    assert "201" in create_item["responses"]
+    assert "401" in create_item["responses"]
+    assert "409" in create_item["responses"]
+    assert "422" in create_item["responses"]
+    assert create_item["responses"]["409"]["content"]["application/json"]["schema"]["$ref"].endswith("/ErrorEnvelope")
+
+    health = schema["paths"]["/health"]["get"]
+    assert "security" not in health

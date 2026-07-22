@@ -323,8 +323,8 @@ item
 - FastAPI validation error 统一映射。
 - 未捕获异常统一映射为 `INTERNAL_ERROR`。
 - OpenAPI 默认响应清理，避免暴露不符合合同的默认错误响应。
-- operation registry，登记每个 route 的 method、path、operation id、成功状态码、request/response schema 和允许错误码。
-- drift check，验证 mounted routes、OpenAPI 和 operation registry 一致。
+- operation registry，登记每个 route 的 method、未挂载 path、operation id、成功状态码、auth 要求、request/response schema 和允许错误码。
+- drift check，验证 mounted routes、OpenAPI、API contract Routes 表和 operation registry 一致。
 
 示例接口必须展示：
 
@@ -1136,7 +1136,7 @@ docs/plans/
 - `.env.example`、env manifest 和配置 section 不漂移。
 - 普通测试不依赖真实 Postgres / Redis / OSS。
 - PostgreSQL integration 只能显式打到 `_test` 数据库。
-- OpenAPI、operation registry 和 route 不漂移。
+- OpenAPI、operation registry、API contract Routes 表和 route 不漂移。
 - 未捕获异常会进入 `INTERNAL_ERROR` envelope，并记录可追踪日志。
 - request id / trace id 在响应、日志和下游 HTTP client 中一致传递。
 - 文档能清楚说明：

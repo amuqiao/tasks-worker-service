@@ -113,6 +113,12 @@ def install_exception_handlers(application: FastAPI) -> None:
 
 
 def install_openapi(application: FastAPI) -> None:
+    def is_error_envelope_response(response: object) -> bool:
+        if not isinstance(response, dict):
+            return False
+        schema = response.get("content", {}).get("application/json", {}).get("schema", {})
+        return isinstance(schema, dict) and str(schema.get("$ref", "")).endswith("/ErrorEnvelope")
+
     def custom_openapi():
         if application.openapi_schema:
             return application.openapi_schema
@@ -120,7 +126,9 @@ def install_openapi(application: FastAPI) -> None:
         for path_item in schema.get("paths", {}).values():
             for operation in path_item.values():
                 if isinstance(operation, dict):
-                    operation.get("responses", {}).pop("422", None)
+                    response_422 = operation.get("responses", {}).get("422")
+                    if not is_error_envelope_response(response_422):
+                        operation.get("responses", {}).pop("422", None)
         application.openapi_schema = schema
         return application.openapi_schema
 

@@ -23,8 +23,10 @@ Rules:
 - Service 负责事务编排和业务错误映射。
 - Repository 负责 SQLAlchemy 查询，不提交事务。
 - Model 和 migration 必须同步。
+- 新 ORM model 必须导入并登记到 `app/models/__init__.py`；Alembic、测试建表和 migration roundtrip 以 registered metadata 为验收来源。
 - 新 route 必须登记到 `app/api/operations.py`。
-- operation registry 条目必须包含 method、path、operation id、成功状态码、route-specific 业务错误码和 schema 名称。
+- operation registry 条目必须包含 method、未挂载 path、operation id、成功状态码、auth 要求、route-specific 业务错误码和 schema 名称。业务 API 的公开路径由 `SERVICE__API_PREFIX` 渲染。
+- route decorator 必须声明 `response_model`，并使用 `operation_responses(<operation_id>)` 声明注册错误响应。
 - 新业务错误码必须登记到 `app/core/error_registry.py`。
 
 ## Adding Configuration
@@ -85,10 +87,12 @@ The current example is `app/tools/example_tool.py`.首版不提供 dynamic tool 
 
 For every new route:
 
-- Update `app/api/operations.py` with method, path, operation id, success status, route-specific business errors, and schema names.
+- Update `app/api/operations.py` with method, unmounted path, operation id, success status, auth requirement, route-specific business errors, and schema names.
+- Add `response_model` and `responses=operation_responses("<operation_id>")` to the route decorator.
 - Add API tests for success and route-specific business errors.
 - Keep response envelope shape unchanged.
 - Use registered `AppError` codes for business failures.
+- Keep `docs/contracts/api-contract.md` Routes table aligned with operation registry; `./scripts/verify.sh registry` checks this drift.
 - Run `./scripts/verify.sh check`.
 
 ## Verification

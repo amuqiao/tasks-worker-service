@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import AppSettings
 from app.db.base import Base
 from app.main import create_app
-from app.models import Item  # noqa: F401
+import app.models  # noqa: F401
 
 
 @pytest.fixture

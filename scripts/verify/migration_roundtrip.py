@@ -14,6 +14,9 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_DIR))
 
 from app.core.config import get_settings
+from app.db.base import Base
+import app.models  # noqa: F401
+from app.models import REGISTERED_MODELS
 
 
 def require_local(url: URL) -> None:
@@ -88,10 +91,27 @@ async def table_names(target_url: URL) -> set[str]:
         await connection.close()
 
 
+def registered_application_tables() -> set[str]:
+    registered = {model.__table__.name for model in REGISTERED_MODELS}
+    metadata = set(Base.metadata.tables)
+    if not registered:
+        raise AssertionError("registered metadata has no application tables")
+    if registered != metadata:
+        raise AssertionError(
+            f"registered models drift from metadata: registered={sorted(registered)} metadata={sorted(metadata)}"
+        )
+    return registered
+
+
 async def assert_head_schema(target_url: URL) -> None:
     tables = await table_names(target_url)
-    if "items" not in tables:
-        raise AssertionError("head schema missing items table")
+    expected = registered_application_tables()
+    missing = expected - tables
+    if missing:
+        raise AssertionError(f"head schema missing application tables: {sorted(missing)}")
+    unexpected = tables - expected - {"alembic_version"}
+    if unexpected:
+        raise AssertionError(f"head schema has unexpected application tables: {sorted(unexpected)}")
     if "alembic_version" not in tables:
         raise AssertionError("head schema missing alembic_version table")
 
