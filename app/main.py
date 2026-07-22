@@ -1,0 +1,124 @@
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.api.routes.health import router as health_router
+from app.core.config import AppSettings, get_settings
+from app.core.context import get_request_id, get_trace_id
+from app.core.exceptions import AppError
+from app.core.lifecycle import build_health_registry
+from app.core.logging import configure_logging
+from app.core.middleware import RequestContextMiddleware
+from app.schemas.envelope import error_envelope
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    application.state.health_checks = build_health_registry()
+    yield
+
+
+def _request_id(request: Request) -> str:
+    return getattr(request.state, "request_id", get_request_id())
+
+
+def _trace_id(request: Request) -> str:
+    return getattr(request.state, "trace_id", get_trace_id())
+
+
+def install_exception_handlers(application: FastAPI) -> None:
+    @application.exception_handler(AppError)
+    async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+        status_code, body = error_envelope(
+            exc.code,
+            request_id=_request_id(request),
+            trace_id=_trace_id(request),
+            details=exc.details,
+        )
+        return JSONResponse(status_code=status_code, content=jsonable_encoder(body))
+
+    @application.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        errors = [
+            {
+                "loc": list(error.get("loc", ())),
+                "type": str(error.get("type", "")),
+                "msg": str(error.get("msg", "")),
+            }
+            for error in exc.errors()
+        ]
+        status_code, body = error_envelope(
+            "REQUEST_INVALID",
+            request_id=_request_id(request),
+            trace_id=_trace_id(request),
+            details={"errors": errors},
+        )
+        return JSONResponse(status_code=status_code, content=jsonable_encoder(body))
+
+    @application.exception_handler(StarletteHTTPException)
+    async def http_error_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        code = "RESOURCE_NOT_FOUND" if exc.status_code == 404 else "REQUEST_INVALID"
+        status_code, body = error_envelope(
+            code,
+            request_id=_request_id(request),
+            trace_id=_trace_id(request),
+            http_status=exc.status_code,
+            details={"status_code": exc.status_code},
+        )
+        return JSONResponse(status_code=status_code, content=jsonable_encoder(body), headers=exc.headers)
+
+    @application.exception_handler(Exception)
+    async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception("unhandled_exception method=%s path=%s", request.method, request.url.path)
+        status_code, body = error_envelope(
+            "INTERNAL_ERROR",
+            request_id=_request_id(request),
+            trace_id=_trace_id(request),
+        )
+        return JSONResponse(status_code=status_code, content=jsonable_encoder(body))
+
+
+def install_openapi(application: FastAPI) -> None:
+    def custom_openapi():
+        if application.openapi_schema:
+            return application.openapi_schema
+        schema = get_openapi(title=application.title, version=application.version, routes=application.routes)
+        for path_item in schema.get("paths", {}).values():
+            for operation in path_item.values():
+                if isinstance(operation, dict):
+                    operation.get("responses", {}).pop("422", None)
+        application.openapi_schema = schema
+        return application.openapi_schema
+
+    application.openapi = custom_openapi
+
+
+def create_app(settings: AppSettings | None = None) -> FastAPI:
+    app_settings = settings or get_settings()
+    configure_logging(app_settings)
+    application = FastAPI(title=app_settings.service.title, version="0.1.0", lifespan=lifespan)
+    application.state.settings = app_settings
+    application.add_middleware(RequestContextMiddleware, settings=app_settings)
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(app_settings.security.allowed_origin_list),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    install_exception_handlers(application)
+    application.include_router(health_router)
+    install_openapi(application)
+    return application
+
+
+app = create_app()
