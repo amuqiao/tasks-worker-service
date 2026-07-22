@@ -9,6 +9,7 @@
 | `dev.sh` | 本地开发：bootstrap、doctor、端口扫描、API 生命周期、迁移和测试快捷入口。 |
 | `verify.sh` | 一次性验证：env、syntax、registry、Alembic、脚本 smoke、pytest、PostgreSQL integration gate、migration roundtrip gate。 |
 | `deploy.sh` | 三模式部署入口：local、compose-deps、compose-full。 |
+| `k8s.sh` | K8s Pod 内运维：配置、PostgreSQL、应用健康、Alembic 状态和手动迁移检查。 |
 | `tools.sh` | 无默认持久副作用工具：secret 生成、DATABASE__URL / REDIS__URL 编码。 |
 
 ## Shared Helpers
@@ -42,4 +43,5 @@
 ./scripts/tools.sh secret
 ./scripts/verify.sh check
 ./scripts/deploy.sh check
+kubectl exec -it <api-pod> -- ./scripts/k8s.sh check
 ```

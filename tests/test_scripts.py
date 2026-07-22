@@ -53,7 +53,7 @@ def script_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
 
 
 def test_script_help_commands_work():
-    for script in ("./scripts/dev.sh", "./scripts/deploy.sh", "./scripts/verify.sh", "./scripts/tools.sh"):
+    for script in ("./scripts/dev.sh", "./scripts/deploy.sh", "./scripts/k8s.sh", "./scripts/verify.sh", "./scripts/tools.sh"):
         result = run_script(script, "help")
         assert result.returncode == 0
         assert "Usage:" in result.stdout
@@ -102,6 +102,127 @@ def test_migration_roundtrip_help_does_not_execute_task():
     assert "Usage:" in result.stdout
     assert "upgrade head -> downgrade base -> upgrade head" in result.stdout
     assert "OK        upgrade" not in result.stdout
+
+
+def test_k8s_check_requires_pod_environment():
+    result = run_script("./scripts/k8s.sh", "check", "config")
+
+    assert result.returncode == 2
+    assert "must run inside a K8s Pod" in result.stderr
+
+
+def test_k8s_subcommand_help_does_not_execute_task():
+    check = run_script("./scripts/k8s.sh", "check", "--help")
+    migrate = run_script("./scripts/k8s.sh", "migrate", "--help")
+
+    assert check.returncode == 0
+    assert "check <config|postgres|app>" in check.stdout
+    assert "KUBERNETES_SERVICE_HOST" not in check.stderr
+    assert migrate.returncode == 0
+    assert "migrate --confirm" in migrate.stdout
+    assert "requires --confirm" not in migrate.stderr
+
+
+def test_k8s_script_does_not_call_kubectl():
+    body = (ROOT_DIR / "scripts" / "k8s.sh").read_text(encoding="utf-8")
+    non_example_lines = [
+        line
+        for line in body.splitlines()
+        if "kubectl" in line and "kubectl exec" not in line and "不调用 kubectl" not in line
+    ]
+
+    assert non_example_lines == []
+
+
+def test_k8s_check_config_uses_application_settings(tmp_path):
+    result = subprocess.run(
+        ["./scripts/k8s.sh", "check", "config"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(
+            tmp_path,
+            KUBERNETES_SERVICE_HOST="10.96.0.1",
+            DATABASE__URL="postgresql+asyncpg://postgres:secret@postgres.default.svc:5432/fastapi_lite",
+            REDIS__URL="redis://redis.default.svc:6379/0",
+            REDIS__ENABLED="true",
+            STORAGE__BACKEND="disabled",
+        ),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "== K8s Config ==" in result.stdout
+    assert "host=postgres.default.svc" in result.stdout
+    assert "password_present=true" in result.stdout
+    assert "secret" not in result.stdout
+    assert "OK config" in result.stdout
+
+
+def test_k8s_check_postgres_rejects_non_postgres_url_with_config_exit_code(tmp_path):
+    result = subprocess.run(
+        ["./scripts/k8s.sh", "check", "postgres"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(
+            tmp_path,
+            KUBERNETES_SERVICE_HOST="10.96.0.1",
+            DATABASE__URL="sqlite+aiosqlite:///:memory:",
+        ),
+    )
+
+    assert result.returncode == 2
+    assert "must be PostgreSQL" in result.stderr
+
+
+def test_k8s_migrate_requires_confirm_before_runtime_checks(tmp_path):
+    result = subprocess.run(
+        ["./scripts/k8s.sh", "migrate"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path, KUBERNETES_SERVICE_HOST="10.96.0.1"),
+    )
+
+    assert result.returncode == 2
+    assert "requires --confirm" in result.stderr
+
+
+def test_k8s_migrate_confirm_dispatches_alembic(tmp_path):
+    root = tmp_path / "root"
+    bin_dir = tmp_path / "bin"
+    log_file = tmp_path / "alembic.log"
+    root.mkdir()
+    bin_dir.mkdir()
+    alembic = bin_dir / "alembic"
+    alembic.write_text(
+        f"""#!/usr/bin/env sh
+echo "$@" >> "{log_file}"
+exit 0
+"""
+    )
+    alembic.chmod(0o755)
+
+    result = subprocess.run(
+        ["./scripts/k8s.sh", "migrate", "--confirm"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(
+            tmp_path,
+            KUBERNETES_SERVICE_HOST="10.96.0.1",
+            ROOT_DIR=str(root),
+            PATH=f"{bin_dir}:{os.environ['PATH']}",
+        ),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RUN" in result.stdout
+    assert log_file.read_text().strip() == "upgrade head"
 
 
 def test_dev_ports_help_does_not_require_json_execution():
@@ -451,7 +572,12 @@ exit 1
         text=True,
         capture_output=True,
         check=False,
-        env=script_env(tmp_path, PATH=f"{bin_dir}:{os.environ['PATH']}"),
+        env=script_env(
+            tmp_path,
+            PATH=f"{bin_dir}:{os.environ['PATH']}",
+            POSTGRES_HOST_PORT="25432",
+            REDIS_HOST_PORT="26379",
+        ),
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
