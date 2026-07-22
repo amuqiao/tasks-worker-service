@@ -276,6 +276,46 @@ def test_stale_pid_file_does_not_kill_unowned_process(tmp_path):
         sleeper.wait(timeout=5)
 
 
+def test_stop_without_target_defaults_to_api(tmp_path):
+    result = subprocess.run(
+        ["./scripts/dev.sh", "stop"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path),
+    )
+
+    assert result.returncode == 0
+    assert "STOPPED" in result.stdout
+
+
+def test_stop_and_restart_reject_unknown_target(tmp_path):
+    stop = subprocess.run(
+        ["./scripts/dev.sh", "stop", "worker"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path),
+    )
+    restart = subprocess.run(
+        ["./scripts/dev.sh", "restart", "worker"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path),
+    )
+
+    assert stop.returncode == 2
+    assert "unexpected argument" in stop.stderr
+    assert "stop [api]" in stop.stderr
+    assert restart.returncode == 2
+    assert "unexpected argument" in restart.stderr
+    assert "restart [api]" in restart.stderr
+
+
 def test_stale_pid_with_matching_command_but_wrong_cwd_is_not_killed(tmp_path):
     sleeper = subprocess.Popen(
         ["bash", "-c", 'exec -a "uvicorn app.main:app" sleep 5'],
@@ -341,6 +381,37 @@ def test_start_status_stop_api_lifecycle(tmp_path):
     finally:
         subprocess.run(
             ["./scripts/dev.sh", "stop", "api"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+
+
+def test_restart_without_target_defaults_to_api(tmp_path):
+    if not shutil.which("curl"):
+        pytest.skip("curl is required by dev.sh restart")
+    port = unused_port()
+    env = script_env(tmp_path, API_PORT=str(port))
+
+    try:
+        restart = subprocess.run(
+            ["./scripts/dev.sh", "restart"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+
+        assert restart.returncode == 0, restart.stdout + restart.stderr
+        assert "STOPPED" in restart.stdout
+        assert "STARTED" in restart.stdout
+        assert "READY" in restart.stdout
+    finally:
+        subprocess.run(
+            ["./scripts/dev.sh", "stop"],
             cwd=ROOT_DIR,
             text=True,
             capture_output=True,
@@ -497,6 +568,91 @@ def test_deploy_compose_subcommand_help():
     assert result.returncode == 0
     assert "compose-deps" in result.stdout
     assert "compose-full" in result.stdout
+
+
+def test_deploy_down_without_mode_stops_all_in_order(tmp_path):
+    bin_dir = tmp_path / "bin"
+    log_file = tmp_path / "calls.log"
+    bin_dir.mkdir()
+
+    docker = bin_dir / "docker"
+    docker.write_text(
+        f"""#!/usr/bin/env sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  echo "docker $@" >> "{log_file}"
+  exit 0
+fi
+exit 1
+"""
+    )
+    docker.chmod(0o755)
+
+    result = subprocess.run(
+        ["./scripts/deploy.sh", "down"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(
+            tmp_path,
+            PATH=f"{bin_dir}:{os.environ['PATH']}",
+        ),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Deploy Down All" in result.stdout
+    assert "STOPPED" in result.stdout
+    calls = log_file.read_text().splitlines()
+    assert "--profile app stop api postgres redis" in calls[0]
+    assert calls[1].endswith("stop postgres redis")
+
+
+def test_deploy_down_without_mode_fails_when_compose_is_unavailable(tmp_path):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env sh
+exit 127
+"""
+    )
+    docker.chmod(0o755)
+
+    result = subprocess.run(
+        ["./scripts/deploy.sh", "down"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(
+            tmp_path,
+            PATH=f"{bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin",
+        ),
+    )
+
+    assert result.returncode == 2
+    assert "STOPPED" in result.stdout
+    assert "Docker Compose is not available" in result.stderr
+
+
+def test_deploy_down_local_keeps_targeted_behavior_without_compose(tmp_path):
+    result = subprocess.run(
+        ["./scripts/deploy.sh", "down", "local"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path, PATH="/usr/bin:/bin:/usr/sbin:/sbin"),
+    )
+
+    assert result.returncode == 0
+    assert "STOPPED" in result.stdout
 
 
 def test_deploy_compose_deps_rejects_busy_host_port_before_docker(tmp_path):

@@ -27,6 +27,7 @@ Usage:
   modes                 展示三种基础部署模型。
   check                 校验部署文件、compose 配置、入口脚本和 project 名冲突。
   up local              委托 ./scripts/dev.sh start api。
+  down [mode]           全量停止 local、compose-full、compose-deps；带 mode 时只停止指定模型。
   down local            委托 ./scripts/dev.sh stop api。
   status local          委托 ./scripts/dev.sh status。
   up compose-deps       启动 PostgreSQL / Redis 本地依赖。
@@ -56,6 +57,7 @@ Usage:
   up compose-full 会构建 API 镜像并启动 API / PostgreSQL / Redis；API 容器启动时默认执行 Alembic migration。
   compose-full 会拒绝与本地 API 混跑；local 会拒绝与 compose-full API 混跑。
   down 使用 compose stop，不删除 volume；down/status 也会检查 compose project working_dir，避免误操作其他工作树。
+  down 不带 mode 时会按 local -> compose-full -> compose-deps 顺序执行全量停止。
 
 成功标准:
   check 成功 = 必需部署文件存在、脚本语法正确、compose 配置可解析或 Docker 未安装时静态检查通过。
@@ -94,7 +96,7 @@ Usage:
   ./scripts/deploy.sh ${name}
 EOF
       ;;
-    up|down|status)
+    up|status)
       cat <<EOF
 Usage:
   ./scripts/deploy.sh ${name} <local|compose-deps|compose-full>
@@ -111,6 +113,27 @@ Usage:
   ./scripts/deploy.sh ${name} local
   ./scripts/deploy.sh ${name} compose-deps
   ./scripts/deploy.sh ${name} compose-full
+EOF
+      ;;
+    down)
+      cat <<'EOF'
+Usage:
+  ./scripts/deploy.sh down [local|compose-deps|compose-full]
+
+职责:
+  不带 mode 时全量停止 local、compose-full、compose-deps；带 mode 时只停止指定部署模型。
+
+副作用与保护边界:
+  local 委托 ./scripts/dev.sh stop api。
+  compose-full 管理 API / PostgreSQL / Redis。
+  compose-deps 只管理 PostgreSQL / Redis。
+  全量停止顺序固定为 local -> compose-full -> compose-deps。
+
+常用示例:
+  ./scripts/deploy.sh down
+  ./scripts/deploy.sh down local
+  ./scripts/deploy.sh down compose-deps
+  ./scripts/deploy.sh down compose-full
 EOF
       ;;
     *)
@@ -199,6 +222,19 @@ down_local() {
   "$ROOT_DIR/scripts/dev.sh" stop api
 }
 
+down_all() {
+  section "Deploy Down All"
+  event "RUN" "local" "down"
+  down_local
+  if ! compose_available; then
+    die "Docker Compose is not available; compose modes were not stopped" 2
+  fi
+  event "RUN" "compose-full" "down"
+  down_full
+  event "RUN" "compose-deps" "down"
+  down_deps
+}
+
 status_local() {
   "$ROOT_DIR/scripts/dev.sh" status
 }
@@ -276,6 +312,10 @@ case "$cmd" in
     shift
     if args_include_help "$@"; then command_usage "$action"; exit $?; fi
     mode="${1:-}"
+    if [[ "$action" == "down" && -z "$mode" ]]; then
+      down_all
+      exit $?
+    fi
     [[ -n "$mode" ]] || die "usage: ./scripts/deploy.sh $action <local|compose-deps|compose-full>" 2
     shift
     reject_extra_args "usage: ./scripts/deploy.sh $action $mode" "$@"

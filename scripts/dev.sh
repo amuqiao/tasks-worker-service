@@ -27,8 +27,8 @@ Usage:
   doctor           检查常用本地开发前置条件、配置文件、端口和脚本入口。
   run              前台运行 FastAPI API，启用 uvicorn --reload。
   start api        后台启动 FastAPI API。
-  stop api         停止后台 API。
-  restart api      重启后台 API。
+  stop [api]       停止后台 API；省略 api 时等价于 stop api。
+  restart [api]    重启后台 API；省略 api 时等价于 restart api。
   status           展示 API 进程、端口、URL、配置文件和日志路径。
   logs             tail API 日志。
   migrate          对当前 DATABASE__URL 执行 Alembic upgrade head。
@@ -113,9 +113,13 @@ Usage:
 EOF
       ;;
     start|stop|restart)
+      local usage_target="api"
+      if [[ "$name" == "stop" || "$name" == "restart" ]]; then
+        usage_target="[api]"
+      fi
       cat <<EOF
 Usage:
-  ./scripts/dev.sh ${name} api
+  ./scripts/dev.sh ${name} ${usage_target}
 
 职责:
   执行 API 生命周期子命令 ${name}。查看顶层 help 获取完整配置、输出和退出码合同。
@@ -406,17 +410,15 @@ case "$cmd" in
   stop)
     shift
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
-    [[ "${1:-}" == "api" ]] || die "usage: ./scripts/dev.sh stop api" 2
-    shift
-    reject_extra_args "usage: ./scripts/dev.sh stop api" "$@"
+    if [[ "${1:-}" == "api" ]]; then shift; fi
+    reject_extra_args "usage: ./scripts/dev.sh stop [api]" "$@"
     stop_api
     ;;
   restart)
     shift
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
-    [[ "${1:-}" == "api" ]] || die "usage: ./scripts/dev.sh restart api" 2
-    shift
-    reject_extra_args "usage: ./scripts/dev.sh restart api" "$@"
+    if [[ "${1:-}" == "api" ]]; then shift; fi
+    reject_extra_args "usage: ./scripts/dev.sh restart [api]" "$@"
     stop_api
     start_api
     ;;
