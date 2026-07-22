@@ -1,64 +1,59 @@
 # FastAPI Lite 全局心智模型
 
-本文是一张 `fastapi-lite` 工程地图：帮助你快速知道这套骨架有什么、边界在哪里、开发新业务时应该先看哪里。
+这是一份精简版全局视角：打开它，只需要快速知道 `fastapi-lite` 的地基有什么、新业务怎么接、哪些能力不要误以为已经有。
 
-## 文档定位
+## 这是什么
 
-这篇文档只负责建立全局视角，不作为权威合同，不替代实现文档、API 文档、扩展合同或计划文档。
+`fastapi-lite` 是一个轻量 FastAPI 服务骨架。
 
-权威来源按职责分工：
+它不追求预置所有功能，而是固定一套基础工程范式：
 
-- 已实现事实：[`../current/implementation.md`](../current/implementation.md)
-- HTTP 调用合同：[`../contracts/api-contract.md`](../contracts/api-contract.md)
-- 新功能扩展规则：[`../contracts/extension-contract.md`](../contracts/extension-contract.md)
-- P1 缺口和漂移检查：[`../plans/drift-checklist.md`](../plans/drift-checklist.md)
-- 脚本入口说明：[`../../scripts/README.md`](../../scripts/README.md)
+- HTTP 请求怎么进来。
+- 配置、日志、错误码怎么统一。
+- 数据库、仓储、迁移怎么组织。
+- 外部资源怎么接入生命周期。
+- 新业务怎么验证不漂移。
 
-## 一句话理解
+更细的规则看：
 
-`fastapi-lite` 是面向业务 HTTP API 的轻量服务骨架。它已经固定了 HTTP 请求处理、配置、日志、错误、数据库访问、provider lifecycle、示例业务、脚本和验证范式；worker、broker、outbox、reconciler 和更完整观测能力仍是后续扩展点。
+- 当前实现：[`../current/implementation.md`](../current/implementation.md)
+- 扩展规则：[`../contracts/extension-contract.md`](../contracts/extension-contract.md)
+- 后续缺口：[`../plans/drift-checklist.md`](../plans/drift-checklist.md)
 
-它的价值不是预置所有基础设施，而是让不同业务服务按同一套工程范式扩展，避免目录、配置、错误码、仓储、日志、启动脚本和验证方式各自漂移。
+## 地基有哪些
 
-## 阅读路径
+- `create_app()`：统一装配 settings、logging、middleware、exception handlers、routers、OpenAPI。
+- `lifespan`：统一启动和关闭 provider，并注册 `/ready` 检查。
+- 配置管理：section 化 `AppSettings`，配合 env manifest 和 `.env.example` 校验。
+- 请求上下文：`X-Request-ID`、`X-Trace-ID` 贯穿响应、日志和下游 HTTP client。
+- 日志合同：access/error log 保留 request、trace、method、path、operation、status、duration、error code 等字段。
+- 错误合同：`AppError`、error registry、统一 error envelope。
+- HTTP 合同：operation registry、OpenAPI、API docs drift check。
+- 数据层：SQLAlchemy async、Alembic、`UnitOfWork`、repository。
+- 示例业务：`items` CRUD 展示完整业务接口范式。
+- Provider：Postgres、Redis fake boundary、object storage、shared HTTP client。
+- 工具模块：`app/tools/` 提供纯工具示例。
+- 脚本入口：`dev.sh`、`deploy.sh`、`verify.sh`、`tools.sh`。
+- 文档分层：`current` 写已实现事实，`contracts` 写稳定合同，`plans` 写后续缺口。
 
-如果你要开发业务 API 服务，按这个顺序读：
+## 关键术语
 
-1. 本文，建立全局模型。
-2. [`../contracts/extension-contract.md`](../contracts/extension-contract.md)，确认新增模块规则。
-3. [`../../app/api/routes/items.py`](../../app/api/routes/items.py)、[`../../app/services/item_service.py`](../../app/services/item_service.py)、[`../../app/repositories/item_repository.py`](../../app/repositories/item_repository.py)、[`../../app/models/item.py`](../../app/models/item.py)，照 `items` 示例落业务链路。
-4. [`../contracts/api-contract.md`](../contracts/api-contract.md)，同步 HTTP 合同。
-5. [`../plans/drift-checklist.md`](../plans/drift-checklist.md)，提交前做漂移检查。
+这些词不是额外概念，而是后续开发时的固定放置点：
 
-如果你要接入新的外部资源，优先看：
+- `UnitOfWork`：事务工作单元。一次业务写操作里需要多个 repository 协作时，由它统一提交或回滚。
+- `UowFactory`：`UnitOfWork` 的创建入口。service 显式接收它，避免 service 自己创建数据库 session。
+- `Repository`：数据访问对象。只负责查询和数据变更，不负责 HTTP、业务编排和事务提交。
+- `Provider`：基础设施资源接入单元，例如 PostgreSQL、Redis、OSS、HTTP client。负责启动、挂载、健康检查和关闭。
+- `Registry`：注册表。用来集中登记错误码、operation、ORM model 等需要被验证和防漂移检查的对象。
+- `lifespan`：FastAPI 生命周期入口。负责按顺序启动 provider、注册 readiness、关闭资源。
+- `app.state`：应用级资源挂载点。provider 初始化后的资源放在这里，再通过 typed getter 或 dependency 取用。
+- `envelope`：统一响应包裹。成功和失败响应都按固定结构输出，避免接口各自定义格式。
 
-1. [`../../app/core/lifecycle.py`](../../app/core/lifecycle.py)
-2. [`../../app/integrations/postgres.py`](../../app/integrations/postgres.py)
-3. [`../../app/integrations/storage.py`](../../app/integrations/storage.py)
-4. [`../contracts/extension-contract.md`](../contracts/extension-contract.md) 的 provider 章节。
+## 新业务怎么接
 
-如果你要调整本地开发、部署或验证入口，看 [`../../scripts/README.md`](../../scripts/README.md)，不要先复制新增脚本。
+先分清两个视角：**request 运行时链路** 和 **开发验证链路**。
 
-## 整体分层
-
-当前骨架按三层理解：
-
-```text
-foundation
-  -> config / logging / request context / error envelope / registries / scripts
-
-integrations
-  -> Postgres lifecycle / Redis fake boundary / object storage / shared HTTP client
-
-example domain
-  -> items route / schema / service / repository / ORM model / migration
-```
-
-`foundation` 是所有服务共享的工程规则。`integrations` 是外部资源的接入范式。`example domain` 不是目标业务，而是新增业务模块的样板。
-
-## 运行面一：HTTP 请求链路
-
-单次 HTTP 请求只经过运行时链路，不经过 migration、文档 drift gate 或测试：
+运行时 request 链路：
 
 ```text
 request
@@ -72,151 +67,74 @@ request
   -> repository
   -> ORM model
   -> database
-  -> AppError / validation / unexpected error mapping
-  -> success/error envelope
+  -> error mapping
+  -> envelope response
 ```
 
-排障时也先按这个链路看：header/context 是否正确，auth 是否通过，schema 是否校验失败，service 是否抛出 `AppError`，repository/DB 是否返回预期结果，最后 envelope 是否符合合同。
-
-业务运行路径要求显式注入 `UowFactory`。底层仍保留少量 DB helper 用于测试和兼容场景，但新业务 service 不应隐式依赖全局数据库状态。
-
-## 运行面二：Provider / Lifespan 链路
-
-外部资源不在请求中临时创建，而是在 lifespan 中统一启动、检查和关闭：
+开发验证链路：
 
 ```text
-settings
-  -> lifecycle provider registry
-  -> provider startup
-  -> typed app.state resource
-  -> health check registration
-  -> /ready
-  -> reverse shutdown
-```
-
-provider seam 已经稳定，但 adapter 成熟度不同：
-
-- PostgreSQL provider 已接入 async engine 和 session factory。
-- Redis 当前只有 fake boundary；启用真实 Redis 会 fail fast。
-- Object storage 当前支持 `disabled` 和 local filesystem；S3-compatible 仍在计划中。
-- HTTP client provider 提供 shared `httpx.AsyncClient`，并透传 request/trace headers。
-
-## 变更面：开发和验证链路
-
-新增或修改业务能力时，才进入变更/验证链路：
-
-```text
-schema / route / service / repository / model
+schema
+  -> route
   -> operation registry
   -> error registry
+  -> service
+  -> repository
+  -> ORM model
   -> Alembic migration
-  -> API contract Routes table
+  -> OpenAPI / docs drift gate
   -> tests
-  -> verify gate
+  -> verify
 ```
 
-具体字段、命名、测试和验证要求不要在本文维护，统一看 [`../contracts/extension-contract.md`](../contracts/extension-contract.md)。本文只提醒你：运行链路和变更链路是两件事，不要把 migration、docs drift、tests 当成单次请求的一部分。
+核心规则：
 
-## 骨架组成
+- route 只处理 HTTP dependency、status code 和 envelope。
+- service 处理事务编排和业务错误映射。
+- service 必须显式接收 `UowFactory`，不要自己创建数据库 session。
+- repository 只写查询和数据变更，不提交事务。
+- ORM model 要登记到 `app/models/__init__.py`。
+- 新 route、错误码、API docs 要同步注册。
+- 最后跑 `./scripts/verify.sh check`。
 
-| 层面 | 当前有什么 | 应如何理解 |
-|---|---|---|
-| HTTP foundation | app factory、middleware、exception handlers、OpenAPI 定制 | 固定请求入口、响应 envelope、错误映射和合同投影。 |
-| Context / logging | request id、trace id、access/error 稳定字段 | 保证请求、日志和下游 HTTP client 能串起来；不是完整 OTel/metrics 平台。 |
-| Config | section 化 settings、env manifest、release invariant | 新配置必须进入 typed section 和 env 校验链路。 |
-| Data | SQLAlchemy async、Alembic、UoW、repository、`items` 示例 | 提供数据库访问和业务模块分层范式。 |
-| Providers | Postgres、Redis fake、object storage、HTTP client | 固定外部资源接入方式；不同 adapter 完成度不同。 |
-| Registries | error registry、operation registry、health registry、provider registry | 用注册点减少隐性约定，并让 verify 能发现漂移。 |
-| Tools | `app/tools/example_tool.py` | 给纯工具模块提供放置和校验样板。 |
-| Scripts | `dev.sh`、`deploy.sh`、`verify.sh`、`tools.sh` | 统一开发、部署、验证和本地工具入口。 |
-| Docs | current / contracts / plans | 分开维护“已实现事实、稳定合同、未来计划”。 |
+## 新基础设施怎么接
 
-## 扩展时怎么判断放哪里
-
-新增业务能力：
+新增外部资源按 provider 范式走：
 
 ```text
-app/api/routes
-app/schemas
-app/services
-app/repositories
-app/models
-alembic/versions
-tests
-docs/contracts/api-contract.md
+config section
+  -> provider startup
+  -> app.state resource
+  -> health check
+  -> readiness
+  -> shutdown
+  -> tests
 ```
 
-具体步骤看 [`../contracts/extension-contract.md`](../contracts/extension-contract.md) 的 business module 和 API contract 章节。
+核心规则：
 
-新增外部资源：
+- 配置先进入 typed settings section。
+- provider 在 lifespan 中启动和关闭。
+- 资源挂到 `app.state`，业务代码通过 typed getter 或 dependency 使用。
+- readiness 要能暴露依赖状态。
+- 未实现的真实后端要 fail fast，不要静默降级。
 
-```text
-app/core/config
-app/integrations
-app/core/lifecycle.py
-tests
-docs/current 或 docs/contracts
-```
+## 当前不要误解
 
-它必须走 provider/lifespan，不要在 import 时创建连接。
+当前骨架不是完整 worker 平台。
 
-新增 middleware：
+这些能力现在不要假设已经可用：
 
-```text
-app/core/middleware.py
-app/main.py:create_app()
-tests
-docs/contracts/extension-contract.md
-```
-
-middleware 只做 HTTP 横切能力，不放业务规则、数据库事务、provider lifecycle 或 route-specific auth。
-
-新增工具：
-
-```text
-app/tools
-tests/test_tools.py
-```
-
-纯工具先保持静态 spec + schema + callable + tests。不要提前做 dynamic tool catalog。
-
-新增脚本能力：
-
-```text
-scripts/dev.sh       # 本地开发生命周期
-scripts/verify.sh    # 一次性验证
-scripts/deploy.sh    # 部署模型 / compose
-scripts/tools.sh     # 无默认持久副作用的本地工具
-scripts/lib          # shell helper
-```
-
-脚本详细规则看 [`../../scripts/README.md`](../../scripts/README.md) 和 [`../contracts/extension-contract.md`](../contracts/extension-contract.md)。
-
-## 当前不属于骨架的能力
-
-这些类别当前不属于已实现基础骨架，不应在业务服务里假设已经可用：
-
-- worker / broker / outbox / DLQ / reconciler。
 - Celery / Taskiq / Kafka / RabbitMQ。
-- 真实 Redis adapter、S3-compatible storage adapter。
-- metrics / rate limit / OpenTelemetry / Prometheus。
-- provider retry / backoff / bulkhead。
+- broker adapter、outbox、DLQ、reconciler。
+- 真实 Redis adapter。
+- S3-compatible storage adapter。
+- 完整 metrics / rate limit / OpenTelemetry / Prometheus。
 - dynamic tool catalog。
 
-具体 P1 backlog 以 [`../plans/drift-checklist.md`](../plans/drift-checklist.md) 为准。等真实业务服务或 worker 服务出现需求时，再按现有范式沉淀新的稳定接入方式。
+这些不是不重要，而是应该等具体业务服务或 worker 服务有真实需求后，再按现有配置、provider、生命周期、测试和文档范式接入。
 
-## 稳定性判断
-
-当前 `fastapi-lite` 已经适合作为业务 API 服务骨架。这个判断建立在 [`../current/implementation.md`](../current/implementation.md) 的已实现事实和验证基线上：
-
-- HTTP 请求链路闭合。
-- 数据访问范式闭合。
-- HTTP 合同和 OpenAPI drift gate 闭合。
-- provider/lifespan 范式闭合。
-- 脚本和验证入口可用。
-- 文档分层明确。
-
-后续新增功能时，优先遵守一个原则：
+## 记住一条原则
 
 ```text
 能复用已有范式就复用；
