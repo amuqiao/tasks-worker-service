@@ -15,6 +15,8 @@ from app.core.config.sections import (
     SecuritySettings,
     ServiceSettings,
     StorageSettings,
+    TaskiqSettings,
+    WorkerSettings,
 )
 from app.core.config.validation import validate_release_invariants
 
@@ -64,6 +66,8 @@ class AppSettings(BaseSettings):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    taskiq: TaskiqSettings = Field(default_factory=TaskiqSettings)
+    worker: WorkerSettings = Field(default_factory=WorkerSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     http_client: HttpClientSettings = Field(default_factory=HttpClientSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)

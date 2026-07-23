@@ -73,6 +73,39 @@ class RedisSettings(ConfigSection):
     url: str = "redis://127.0.0.1:26379/0"
 
 
+class TaskiqSettings(ConfigSection):
+    broker_kind: str = "redis_stream"
+    redis_url: str = "redis://127.0.0.1:26379/0"
+    task_name: str = "job-platform.consume_queue_envelope"
+    queue_name: str = "job.example-task.v1"
+
+    @field_validator("broker_kind")
+    @classmethod
+    def validate_broker_kind(cls, value: str) -> str:
+        if value != "redis_stream":
+            raise ValueError("TASKIQ__BROKER_KIND must be redis_stream")
+        return value
+
+
+class WorkerSettings(ConfigSection):
+    service_name: str = "worker-x"
+    worker_name: str = "worker-x-taskiq"
+    worker_session_id: str = "worker-x-local"
+    job_service_base_url: str = "http://127.0.0.1:8100/internal/v1"
+    job_service_api_key: SecretStr = Field(default=SecretStr("dev-service-key"), repr=False)
+
+    @field_validator("job_service_base_url")
+    @classmethod
+    def validate_job_service_base_url(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("WORKER__JOB_SERVICE_BASE_URL must start with http:// or https://")
+        return value.rstrip("/")
+
+    @property
+    def job_service_api_key_value(self) -> str:
+        return self.job_service_api_key.get_secret_value()
+
+
 class StorageSettings(ConfigSection):
     backend: Literal["disabled", "local", "s3_compatible"] = "disabled"
     local_path: str = "storage/objects"
@@ -123,4 +156,3 @@ class ObservabilitySettings(ConfigSection):
         if normalized not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ValueError("OBSERVABILITY__LOG_LEVEL must be a valid Python logging level")
         return normalized
-

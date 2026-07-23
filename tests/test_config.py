@@ -13,6 +13,8 @@ def test_settings_are_sectioned_and_load_defaults():
 
     assert settings.runtime.app_env == "local"
     assert settings.service.api_prefix == "/v1"
+    assert settings.taskiq.broker_kind == "redis_stream"
+    assert settings.worker.service_name == "worker-x"
     assert settings.storage.backend == "disabled"
 
 
@@ -28,6 +30,11 @@ def test_release_rejects_local_storage():
             security={"service_api_key": "prd-secret-token-123456"},
             storage={"backend": "local"},
         )
+
+
+def test_taskiq_rejects_redis_list_broker():
+    with pytest.raises(ValidationError, match="TASKIQ__BROKER_KIND"):
+        AppSettings(taskiq={"broker_kind": "redis_list"})
 
 
 def test_env_example_matches_manifest():

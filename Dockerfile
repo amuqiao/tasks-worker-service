@@ -16,8 +16,9 @@ COPY alembic ./alembic
 COPY app ./app
 COPY scripts ./scripts
 COPY start-api.sh ./start-api.sh
+COPY start-worker.sh ./start-worker.sh
 
-RUN chmod +x ./start-api.sh
+RUN chmod +x ./start-api.sh ./start-worker.sh
 
 EXPOSE 8100
 

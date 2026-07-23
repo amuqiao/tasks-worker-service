@@ -18,6 +18,15 @@ APPLICATION_ENV_KEYS = frozenset(
         "DATABASE__MAX_OVERFLOW",
         "REDIS__ENABLED",
         "REDIS__URL",
+        "TASKIQ__BROKER_KIND",
+        "TASKIQ__REDIS_URL",
+        "TASKIQ__TASK_NAME",
+        "TASKIQ__QUEUE_NAME",
+        "WORKER__SERVICE_NAME",
+        "WORKER__WORKER_NAME",
+        "WORKER__WORKER_SESSION_ID",
+        "WORKER__JOB_SERVICE_BASE_URL",
+        "WORKER__JOB_SERVICE_API_KEY",
         "STORAGE__BACKEND",
         "STORAGE__LOCAL_PATH",
         "STORAGE__ENDPOINT",
@@ -70,4 +79,3 @@ ENV_KEY_MANIFEST = EnvKeyManifest(
     derived_keys=DERIVED_ENV_KEYS,
     deprecated_keys=DEPRECATED_ENV_KEYS,
 )
-

@@ -13,6 +13,9 @@ dependencies = [
     "pydantic-settings==2.14.1",
     "python-dotenv==1.2.2",
     "httpx==0.28.1",
+    "redis==6.4.0",
+    "taskiq==0.12.4",
+    "taskiq-redis==1.1.2",
 ]
 
 [project.optional-dependencies]

@@ -12,10 +12,12 @@
 - SQLAlchemy async、Alembic、UnitOfWork、repository。
 - `items` CRUD 示例模块。
 - lifecycle providers：Postgres、Redis fake boundary、object storage、shared HTTP client。
+- Job Platform worker runtime：`QueueEnvelope` consumer、Worker Internal API client、handler registry 和 taskiq adapter。
+- Worker 使用 Redis Stream taskiq broker，按 `TASKIQ__QUEUE_NAME` 监听物理队列，并由自有 runner 显式控制 ack。
 - `app/tools/` 示例工具模块。
 - `dev.sh`、`deploy.sh`、`verify.sh`、`tools.sh` 脚本入口。
 - 脚本公共能力：`doctor`、端口扫描、PID/log 管理、三模式部署入口、迁移入口、secret/env-url 工具、registry/env/docs drift gate。
-- Dockerfile、docker-compose.yml 和 `start-api.sh` API 容器入口。
+- Dockerfile、docker-compose.yml、`start-api.sh` API 容器入口和 `start-worker.sh` Worker 容器入口。
 
 ## Quick Start
 
@@ -73,6 +75,12 @@ Run the API, PostgreSQL, and Redis in Compose:
 
 ```bash
 ./scripts/deploy.sh up compose-full
+```
+
+Run the Job Platform worker on the host:
+
+```bash
+./start-worker.sh
 ```
 
 Generate local secrets and encoded connection URLs:

@@ -73,6 +73,47 @@ services:
       timeout: 3s
       retries: 12
 
+  worker:
+    build:
+      context: .
+    profiles:
+      - worker
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      RUNTIME__APP_ENV: ${RUNTIME__APP_ENV:-local}
+      SERVICE__NAME: ${SERVICE__NAME:-fastapi-lite}
+      SERVICE__TITLE: ${SERVICE__TITLE:-FastAPI Lite}
+      SERVICE__API_PREFIX: ${SERVICE__API_PREFIX:-/v1}
+      SECURITY__SERVICE_API_KEY: ${SECURITY__SERVICE_API_KEY:-<replace-me>}
+      SECURITY__DISABLE_AUTH: ${SECURITY__DISABLE_AUTH:-false}
+      SECURITY__ALLOWED_ORIGINS: ${SECURITY__ALLOWED_ORIGINS:-http://localhost:3000}
+      DATABASE__URL: postgresql+asyncpg://postgres:postgres@postgres:5432/${POSTGRES_DB:-fastapi_lite}
+      DATABASE__SSL: "false"
+      DATABASE__POOL_SIZE: ${DATABASE__POOL_SIZE:-5}
+      DATABASE__MAX_OVERFLOW: ${DATABASE__MAX_OVERFLOW:-10}
+      REDIS__ENABLED: ${REDIS__ENABLED:-false}
+      REDIS__URL: redis://redis:6379/0
+      TASKIQ__BROKER_KIND: ${TASKIQ__BROKER_KIND:-redis_stream}
+      TASKIQ__REDIS_URL: redis://redis:6379/0
+      TASKIQ__TASK_NAME: ${TASKIQ__TASK_NAME:-job-platform.consume_queue_envelope}
+      TASKIQ__QUEUE_NAME: ${TASKIQ__QUEUE_NAME:-job.example-task.v1}
+      WORKER__SERVICE_NAME: ${WORKER__SERVICE_NAME:-worker-x}
+      WORKER__WORKER_NAME: ${WORKER__WORKER_NAME:-worker-x-taskiq}
+      WORKER__WORKER_SESSION_ID: ${WORKER__WORKER_SESSION_ID:-worker-x-local}
+      WORKER__JOB_SERVICE_BASE_URL: ${WORKER__JOB_SERVICE_BASE_URL:-http://host.docker.internal:8100/internal/v1}
+      WORKER__JOB_SERVICE_API_KEY: ${WORKER__JOB_SERVICE_API_KEY:-dev-service-key}
+      HTTP_CLIENT__TIMEOUT_SECONDS: ${HTTP_CLIENT__TIMEOUT_SECONDS:-5}
+      OBSERVABILITY__LOG_LEVEL: ${OBSERVABILITY__LOG_LEVEL:-INFO}
+      OBSERVABILITY__ACCESS_LOG_ENABLED: ${OBSERVABILITY__ACCESS_LOG_ENABLED:-true}
+      OBSERVABILITY__HEALTH_ACCESS_LOG: ${OBSERVABILITY__HEALTH_ACCESS_LOG:-false}
+      WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["./start-worker.sh"]
+
 volumes:
   postgres-data:
   redis-data:

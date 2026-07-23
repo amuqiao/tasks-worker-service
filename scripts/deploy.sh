@@ -61,6 +61,7 @@ Usage:
   up compose-deps 只启动 PostgreSQL / Redis，不启动 API。
   up compose-full 会构建 API 镜像并启动 API / PostgreSQL / Redis；API 容器启动时默认执行 Alembic migration。
   compose-full 会拒绝与本地 API 混跑；local 会拒绝与 compose-full API 混跑。
+  worker profile 可用于构建 Worker Pod 形态，默认 deploy mode 不自动启动 worker。
   down 使用 compose stop，不删除 volume；down/status 也会检查 compose project working_dir，避免误操作其他工作树。
   down 必须显式指定 mode；down all 会先停 local API，再一次性停止本仓库 compose api/postgres/redis。
 
@@ -190,6 +191,8 @@ check_compose_config_if_available() {
   event "OK" "compose-deps" "docker compose config"
   ENV_FILE=.env.example compose --profile app config --quiet
   event "OK" "compose-full" "docker compose --profile app config"
+  ENV_FILE=.env.example compose --profile worker config --quiet
+  event "OK" "compose-worker" "docker compose --profile worker config"
   if docker info >/dev/null 2>&1; then
     assert_no_compose_project_name_conflict
     event "OK" "compose-project" "no working_dir conflict"
@@ -212,6 +215,8 @@ check_deploy() {
   event "OK" "compose" "present"
   require_file "$ROOT_DIR/start-api.sh"
   event "OK" "start-api.sh" "present"
+  require_file "$ROOT_DIR/start-worker.sh"
+  event "OK" "start-worker.sh" "present"
   require_file "$ROOT_DIR/.env.example"
   event "OK" ".env.example" "present"
   require_file "$ROOT_DIR/README.md"
@@ -237,6 +242,8 @@ check_deploy() {
   event "OK" "modes.sh" "syntax"
   sh -n "$ROOT_DIR/start-api.sh"
   event "OK" "start-api.sh" "syntax"
+  sh -n "$ROOT_DIR/start-worker.sh"
+  event "OK" "start-worker.sh" "syntax"
 }
 
 up_local() {

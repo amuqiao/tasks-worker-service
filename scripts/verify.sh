@@ -218,6 +218,7 @@ case "$cmd" in
     bash -n scripts/deploy.sh
     bash -n scripts/k8s.sh
     bash -n scripts/verify.sh
+    bash -n start-worker.sh
     bash -n scripts/tools.sh
     bash -n scripts/lib/compose.sh
     bash -n scripts/lib/modes.sh
