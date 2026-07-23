@@ -298,7 +298,7 @@ WORKER__JOB_SERVICE_BASE_URL=http://127.0.0.1:8100/internal/v1
 WORKER__SERVICE_NAME=worker-x
 WORKER__WORKER_NAME=worker-x-taskiq
 WORKER__WORKER_SESSION_ID=worker-x-local
-WORKER__JOB_SERVICE_API_KEY=dev-service-key
+WORKER__JOB_SERVICE_API_KEY=dev-worker-key
 WORKER__MANIFEST_PATH=app/worker/manifest.json
 ```
 

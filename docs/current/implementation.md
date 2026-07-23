@@ -108,7 +108,7 @@ route
 当前仓库已经包含面向 Job Platform 的 Worker runtime 模板：
 
 - `app/job_platform_worker/protocol.py` 定义本服务消费 Job Platform `QueueEnvelope` 和 Worker Internal API 所需 DTO。
-- `app/job_platform_worker/job_client.py` 通过 `Bearer worker:<worker_service>:<SERVICE_API_KEY>` 调用 Job Service `/internal/v1/attempts/{attempt_id}/acquire|complete|fail`。
+- `app/job_platform_worker/job_client.py` 通过 `Bearer worker:<worker_service>:<WORKER_API_KEY>` 调用 Job Service `/internal/v1/attempts/{attempt_id}/acquire|complete|fail`。
 - `app/job_platform_worker/runtime.py` 负责 envelope 校验、handler 查找、acquire、业务 handler 执行期间 heartbeat、complete/fail 回写和 `ack/no_ack` 决策。
 - `app/job_platform_worker/handlers.py` 提供 `HandlerRegistry`、`TaskHandler` 和兼容的 `build_default_registry()` 入口。
 - `app/job_platform_worker/manifest.py` 负责读取和校验 Worker Manifest；`app/worker/manifest.json` 是当前 worker 的正式任务声明源；`app/job_platform_worker/registry.py` 只从 manifest 构建 handler registry，不手写业务 task 注册。

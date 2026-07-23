@@ -92,7 +92,7 @@ class WorkerSettings(ConfigSection):
     worker_name: str = "worker-x-taskiq"
     worker_session_id: str = "worker-x-local"
     job_service_base_url: str = "http://127.0.0.1:8100/internal/v1"
-    job_service_api_key: SecretStr = Field(default=SecretStr("dev-service-key"), repr=False)
+    job_service_api_key: SecretStr = Field(default=SecretStr("dev-worker-key"), repr=False)
     job_service_registry_api_key: SecretStr = Field(default=SecretStr("dev-registry-key"), repr=False)
     manifest_path: str = "app/worker/manifest.json"
 
