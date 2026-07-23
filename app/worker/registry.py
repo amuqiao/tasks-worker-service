@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from app.core.config import get_settings
 from app.worker.handlers import HandlerRegistry
-from app.worker.task_modules.example import register_handlers as register_example_handlers
+from app.worker.manifest import build_registry_from_manifest, load_worker_manifest, validate_manifest_runtime
 
 
-def build_worker_registry() -> HandlerRegistry:
-    registry = HandlerRegistry()
-    register_example_handlers(registry)
-    return registry
+def build_worker_registry(manifest_path: str | None = None) -> HandlerRegistry:
+    settings = get_settings()
+    manifest = load_worker_manifest(manifest_path or settings.worker.manifest_path)
+    validate_manifest_runtime(manifest, worker_service=settings.worker.service_name, queue_name=settings.taskiq.queue_name)
+    return build_registry_from_manifest(manifest)

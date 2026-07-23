@@ -111,10 +111,11 @@ route
 - `app/worker/job_client.py` 通过 `Bearer worker:<worker_service>:<SERVICE_API_KEY>` 调用 Job Service `/internal/v1/attempts/{attempt_id}/acquire|complete|fail`。
 - `app/worker/runtime.py` 负责 envelope 校验、handler 查找、acquire、业务 handler 执行期间 heartbeat、complete/fail 回写和 `ack/no_ack` 决策。
 - `app/worker/handlers.py` 提供 `HandlerRegistry`、`TaskHandler` 和兼容的 `build_default_registry()` 入口。
-- `app/worker/registry.py` 是 handler composition root；`app/worker/task_modules/example.py` 展示业务 handler 模块的显式注册模板。
+- `app/worker/manifest.py` / `app/worker/manifest.json` 是正式任务声明源；`app/worker/registry.py` 只从 manifest 构建 handler registry，不手写业务 task 注册。
+- `app/worker/register_cli.py` 提供 `validate` / `render` / `register`，用于本地和 CI/CD 把 Worker Manifest 注册到 Job Service；注册使用独立 `WORKER__JOB_SERVICE_REGISTRY_API_KEY`，不复用 Worker runtime token。
 - `app/worker/taskiq_app.py` 创建 Redis Stream broker；`app/worker/taskiq_tasks.py` 提供 runtime composition helper，不注册默认 `taskiq worker` 消费入口。
 - `app/worker/runner.py` 直接使用 taskiq Redis Stream broker `listen()`，只在 runtime 返回 `ack` 时调用 broker message `ack()`；`no_ack` 不会走默认 `taskiq worker` 的隐式 ack 路径。
-- `TASKIQ__QUEUE_NAME` 是 Worker 监听的物理 Redis Stream，必须与 Job Service 发布的 `QueueEnvelope.queue_name` 匹配；`redis_list` broker 不支持该链路。
+- `TASKIQ__QUEUE_NAME` 是 Worker 监听的物理 Redis Stream，必须与 manifest `queue_name` 和 Job Service 发布的 `QueueEnvelope.queue_name` 匹配；CLI 和 runtime 都会 fail fast 校验；`redis_list` broker 不支持该链路。
 - `start-worker.sh` 是 Worker Pod 入口；`docker-compose.yml` 的 `worker` profile 可构建容器化 worker，不影响现有 API profile。
 
 Worker runtime 的运行入口、配置和 ack/no_ack broker 语义记录在 [`worker-runtime.md`](worker-runtime.md)。

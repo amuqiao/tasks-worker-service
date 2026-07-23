@@ -198,6 +198,7 @@ case "$cmd" in
     reject_extra_args "usage: ./scripts/verify.sh registry" "$@"
     cd "$ROOT_DIR"
     uv run python scripts/verify/registry_check.py
+    uv run python -m app.worker.register_cli validate
     ;;
   alembic)
     shift

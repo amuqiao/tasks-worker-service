@@ -93,6 +93,8 @@ class WorkerSettings(ConfigSection):
     worker_session_id: str = "worker-x-local"
     job_service_base_url: str = "http://127.0.0.1:8100/internal/v1"
     job_service_api_key: SecretStr = Field(default=SecretStr("dev-service-key"), repr=False)
+    job_service_registry_api_key: SecretStr = Field(default=SecretStr("dev-registry-key"), repr=False)
+    manifest_path: str = "app/worker/manifest.json"
 
     @field_validator("job_service_base_url")
     @classmethod
@@ -104,6 +106,10 @@ class WorkerSettings(ConfigSection):
     @property
     def job_service_api_key_value(self) -> str:
         return self.job_service_api_key.get_secret_value()
+
+    @property
+    def job_service_registry_api_key_value(self) -> str:
+        return self.job_service_registry_api_key.get_secret_value()
 
 
 class StorageSettings(ConfigSection):

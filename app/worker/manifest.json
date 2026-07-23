@@ -1,0 +1,33 @@
+{
+  "manifest_version": 1,
+  "worker_service": "worker-x",
+  "queue_name": "job.example-task.v1",
+  "capabilities": ["cpu"],
+  "tasks": [
+    {
+      "task_name": "example.task",
+      "task_version": 1,
+      "handler": "app.worker.task_modules.example:ExampleTaskHandler",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "timeout_seconds": 300,
+      "max_retries": 1,
+      "retry_policy": {},
+      "idempotency_retention_seconds": 86400,
+      "required_worker_capabilities": ["cpu"],
+      "caller_bindings": [
+        {
+          "caller_service": "business-api-a",
+          "callback_url": null,
+          "compensation_window_seconds": 3600
+        }
+      ]
+    }
+  ]
+}

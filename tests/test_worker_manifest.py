@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from app.worker.manifest import build_registry_from_manifest, load_worker_manifest, validate_manifest_runtime
+from app.worker.protocol import QueueEnvelope
+from app.worker.registry import build_worker_registry
+
+HASH = "jsonschema-jcs-v1:sha256:" + "a" * 64
+
+
+def _manifest_payload(**overrides) -> dict:
+    payload = {
+        "manifest_version": 1,
+        "worker_service": "worker-x",
+        "queue_name": "job.example-task.v1",
+        "capabilities": ["cpu"],
+        "tasks": [
+            {
+                "task_name": "example.task",
+                "task_version": 1,
+                "handler": "app.worker.task_modules.example:ExampleTaskHandler",
+                "input_schema": {"type": "object"},
+                "output_schema": {"type": "object"},
+                "caller_bindings": [
+                    {
+                        "caller_service": "business-api-a",
+                        "callback_url": None,
+                        "compensation_window_seconds": 3600,
+                    }
+                ],
+            }
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _write_manifest(tmp_path: Path, payload: dict) -> Path:
+    path = tmp_path / "worker.manifest.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def test_build_worker_registry_loads_handler_from_manifest(tmp_path: Path) -> None:
+    path = _write_manifest(tmp_path, _manifest_payload())
+
+    registry = build_worker_registry(str(path))
+    handler = registry.get("example.task", 1)
+
+    assert handler is not None
+
+
+def test_worker_manifest_rejects_duplicate_tasks(tmp_path: Path) -> None:
+    payload = _manifest_payload()
+    payload["tasks"].append(dict(payload["tasks"][0]))
+    path = _write_manifest(tmp_path, payload)
+
+    with pytest.raises(ValidationError, match="duplicate task"):
+        load_worker_manifest(path)
+
+
+def test_worker_manifest_rejects_duplicate_caller_bindings(tmp_path: Path) -> None:
+    payload = _manifest_payload()
+    payload["tasks"][0]["caller_bindings"].append(dict(payload["tasks"][0]["caller_bindings"][0]))
+    path = _write_manifest(tmp_path, payload)
+
+    with pytest.raises(ValidationError, match="duplicate caller binding"):
+        load_worker_manifest(path)
+
+
+def test_worker_manifest_runtime_requires_matching_queue(tmp_path: Path) -> None:
+    path = _write_manifest(tmp_path, _manifest_payload(queue_name="job.other.v1"))
+    manifest = load_worker_manifest(path)
+
+    with pytest.raises(ValueError, match="TASKIQ__QUEUE_NAME"):
+        validate_manifest_runtime(manifest, worker_service="worker-x", queue_name="job.example-task.v1")
+
+
+def test_worker_manifest_rejects_missing_handler_import(tmp_path: Path) -> None:
+    payload = _manifest_payload(
+        tasks=[
+            {
+                **_manifest_payload()["tasks"][0],
+                "handler": "app.worker.task_modules.example:MissingHandler",
+            }
+        ]
+    )
+    path = _write_manifest(tmp_path, payload)
+
+    with pytest.raises(AttributeError):
+        build_registry_from_manifest(load_worker_manifest(path))
+
+
+async def test_manifest_registered_handler_can_execute() -> None:
+    manifest = load_worker_manifest("app/worker/manifest.json")
+    registry = build_registry_from_manifest(manifest)
+    handler = registry.get("example.task", 1)
+    assert handler is not None
+
+    from app.worker.handlers import WorkerContext
+
+    result = await handler.handle(
+        QueueEnvelope(
+            protocol_version=1,
+            run_id="run-1",
+            node_id="node-1",
+            node_key="main",
+            attempt_id="attempt-1",
+            task_name="example.task",
+            task_version=1,
+            queue_name="job.example-task.v1",
+            input_schema_hash=HASH,
+            output_schema_hash=HASH,
+            input={"message": "hello"},
+            trace_id="trace-1",
+        ),
+        WorkerContext(
+            worker_service="worker-x",
+            worker_name="worker-x-taskiq",
+            worker_session_id="worker-x-local",
+        ),
+    )
+
+    assert result.output["ok"] is True

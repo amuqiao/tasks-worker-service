@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.worker.handlers import HandlerRegistry, HandlerResult, WorkerContext
+from app.worker.handlers import HandlerResult, WorkerContext
 from app.worker.protocol import QueueEnvelope
 
 
@@ -14,7 +14,3 @@ class ExampleTaskHandler:
                 "input_ref": envelope.input_ref,
             }
         )
-
-
-def register_handlers(registry: HandlerRegistry) -> None:
-    registry.register("example.task", 1, ExampleTaskHandler())

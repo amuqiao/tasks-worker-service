@@ -10,7 +10,7 @@ Worker Service 只执行本仓库注册的 handler，并通过 Job Service Worke
 taskiq Redis Stream
   -> app.worker.runner
   -> app.worker.runtime
-  -> app.worker.task_modules.*
+  -> Worker Manifest handler
   -> tasks-platform Worker Internal API
 ```
 
@@ -22,11 +22,13 @@ taskiq Redis Stream
 |---|---|
 | `start-worker.sh` | Worker Pod/容器入口，执行 `python -m app.worker.runner`。 |
 | `app.worker.runner` | 直接监听 `RedisStreamBroker.listen()`，按 runtime 返回值显式调用或跳过 `message.ack()`。 |
-| `app.worker.taskiq_app` | 创建 Redis Stream broker，并注册 taskiq task。 |
+| `app.worker.taskiq_app` | 创建 Redis Stream broker；不注册默认 `taskiq worker` 消费入口。 |
 | `app.worker.taskiq_tasks` | 提供 `run_queue_envelope_with_settings()` composition helper，不注册默认 `taskiq worker` 消费入口。 |
 | `app.worker.runtime` | 校验 `QueueEnvelope`、acquire、heartbeat、执行 handler、complete/fail，并返回 `ack` 或 `no_ack`。 |
-| `app.worker.registry` | 构建 handler registry。 |
-| `app.worker.task_modules.example` | 示例业务 handler 注册模板。 |
+| `app.worker.manifest` | 读取 `worker.manifest.json`，校验任务声明并按 handler path 构建 registry。 |
+| `app.worker.registry` | 从 manifest 构建 handler registry，不手写业务 task 注册。 |
+| `app.worker.register_cli` | 提供 `validate` / `render` / `register`，用于本地和 CI/CD 注册 Worker Manifest。 |
+| `app.worker.task_modules.example` | 示例业务 handler。 |
 
 当前唯一支持的生产消费路径是 `python -m app.worker.runner`，因为该入口直接控制 broker message ack。不要使用默认 `taskiq worker` 启动本服务的 Worker 消费进程。
 
@@ -44,9 +46,11 @@ WORKER__SERVICE_NAME=example-worker
 WORKER__WORKER_NAME=example-worker-taskiq
 WORKER__WORKER_SESSION_ID=example-worker-local
 WORKER__JOB_SERVICE_API_KEY=dev-service-api-key
+WORKER__JOB_SERVICE_REGISTRY_API_KEY=dev-registry-api-key
+WORKER__MANIFEST_PATH=app/worker/manifest.json
 ```
 
-`TASKIQ__QUEUE_NAME` 必须与 Job Service 发布的 `QueueEnvelope.queue_name` 一致。`redis_list` broker 不支持当前链路。
+`WORKER__JOB_SERVICE_API_KEY` 只用于 Worker runtime 调用 Job Service Worker Internal API；`WORKER__JOB_SERVICE_REGISTRY_API_KEY` 只用于 CI/CD 或人工运维注册 Worker Manifest。`TASKIQ__QUEUE_NAME` 必须与 Job Service 发布的 `QueueEnvelope.queue_name` 一致，Worker 启动和 `register_cli validate|render|register` 都会校验它与 manifest `queue_name` 一致。`redis_list` broker 不支持当前链路。
 
 ## Ack Semantics
 
@@ -62,16 +66,50 @@ Worker runtime 返回值与 broker 行为：
 - ack 后 consumer group pending count 回到 `0`。
 - 未 ack 的消息进入 pending，并可由另一个 consumer 通过 taskiq-redis reclaim 再次取得。
 
-## Handler Template
+## Worker Manifest
 
-业务 handler 通过注册模块接入：
+正式任务接入只通过 Worker Manifest。业务 handler 不在 `app.worker.registry` 中手写注册。
 
-```text
-app/worker/task_modules/<business_module>.py
-  def register_handlers(registry: HandlerRegistry) -> None
+```json
+{
+  "manifest_version": 1,
+  "worker_service": "worker-x",
+  "queue_name": "job.example-task.v1",
+  "capabilities": ["cpu"],
+  "tasks": [
+    {
+      "task_name": "example.task",
+      "task_version": 1,
+      "handler": "app.worker.task_modules.example:ExampleTaskHandler",
+      "input_schema": {"type": "object", "additionalProperties": true},
+      "output_schema": {"type": "object", "additionalProperties": true},
+      "caller_bindings": [
+        {"caller_service": "business-api-a", "compensation_window_seconds": 3600}
+      ]
+    }
+  ]
+}
 ```
 
-当前默认 registry 在 `app.worker.registry.build_worker_registry()` 中注册 `example.task@v1`。后续接入具体业务时，新增 task module 并在 `build_worker_registry()` 中显式调用注册函数；不修改 `app.worker.runner`、`app.worker.runtime` 或 `app.worker.taskiq_app`。
+Worker 启动时使用同一份 manifest import handler 并注册到本地 `HandlerRegistry`。CI/CD 或人工运维通过同一份 manifest 调用 Job Service Registry API，使 Job Service 保存 task/schema/queue/binding。新增业务 task 时不修改 Job Service 代码，也不修改 `app.worker.registry`。同一 task/version 的 schema、runtime policy 和 binding 不做静默更新；变化应升版本或走显式迁移。
+
+本地校验：
+
+```bash
+uv run python -m app.worker.register_cli validate
+```
+
+渲染将发送给 Job Service 的 payload：
+
+```bash
+uv run python -m app.worker.register_cli render
+```
+
+注册到 Job Service：
+
+```bash
+uv run python -m app.worker.register_cli register
+```
 
 ## Verification
 
