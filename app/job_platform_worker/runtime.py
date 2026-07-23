@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any, Literal
 
 import httpx
 from pydantic import ValidationError
 
-from app.job_platform_worker.handlers import HandlerRegistry, WorkerContext
+from app.job_platform_worker.handlers import HandlerRegistry, WorkerCancelRequested, WorkerContext
 from app.job_platform_worker.handlers import TaskHandler
 from app.job_platform_worker.job_client import JobServiceApiError, JobServiceClient, JobServiceProtocolError
 from app.job_platform_worker.protocol import AcquireAttemptResponse, QueueEnvelope
@@ -26,10 +26,6 @@ class WorkerRunResult:
 
 
 class WorkerLeaseLost(Exception):
-    pass
-
-
-class WorkerCancelRequested(Exception):
     pass
 
 
@@ -136,9 +132,19 @@ async def _run_handler_with_heartbeat(
     heartbeat_interval = acquired.heartbeat_interval_seconds
     if heartbeat_interval is None:
         raise RuntimeError("Job Service returned missing heartbeat_interval_seconds")
+    if acquired.cancel_requested:
+        raise WorkerCancelRequested("Job Service reported cancel_requested during acquire")
 
     stop_event = asyncio.Event()
-    handler_task = asyncio.create_task(handler.handle(envelope, context))
+    state = _ExecutionState()
+    execution_context = _context_with_runtime_hooks(
+        context,
+        client=client,
+        envelope=envelope,
+        lease_token=lease_token,
+        state=state,
+    )
+    handler_task = asyncio.create_task(handler.handle(envelope, execution_context))
     heartbeat_task = asyncio.create_task(
         _heartbeat_until_stopped(
             client,
@@ -146,6 +152,7 @@ async def _run_handler_with_heartbeat(
             lease_token=lease_token,
             interval_seconds=heartbeat_interval,
             stop_event=stop_event,
+            state=state,
         )
     )
     done, pending = await asyncio.wait(
@@ -171,6 +178,7 @@ async def _heartbeat_until_stopped(
     lease_token: str,
     interval_seconds: float,
     stop_event: asyncio.Event,
+    state: "_ExecutionState",
 ) -> None:
     while True:
         try:
@@ -183,7 +191,41 @@ async def _heartbeat_until_stopped(
         if not heartbeat.lease_valid:
             raise WorkerLeaseLost("Job Service reported invalid lease during heartbeat")
         if heartbeat.cancel_requested:
+            state.cancel_requested = True
             raise WorkerCancelRequested("Job Service reported cancel_requested during heartbeat")
+
+
+@dataclass(slots=True)
+class _ExecutionState:
+    cancel_requested: bool = False
+
+
+def _context_with_runtime_hooks(
+    context: WorkerContext,
+    *,
+    client: JobServiceClient,
+    envelope: QueueEnvelope,
+    lease_token: str,
+    state: _ExecutionState,
+) -> WorkerContext:
+    async def report_progress(percent: int, message: str | None) -> None:
+        heartbeat = await client.heartbeat_attempt(
+            envelope,
+            lease_token=lease_token,
+            progress_percent=percent,
+            progress_message=message,
+        )
+        if not heartbeat.lease_valid:
+            raise WorkerLeaseLost("Job Service reported invalid lease during progress heartbeat")
+        if heartbeat.cancel_requested:
+            state.cancel_requested = True
+            raise WorkerCancelRequested("Job Service reported cancel_requested during progress heartbeat")
+
+    return replace(
+        context,
+        progress_reporter=report_progress,
+        cancel_checker=lambda: state.cancel_requested,
+    )
 
 
 async def _report_handler_failure(

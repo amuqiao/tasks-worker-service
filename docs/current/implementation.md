@@ -118,7 +118,7 @@ route
 - `TASKIQ__QUEUE_NAME` 是 Worker 监听的物理 Redis Stream，必须与 manifest `queue_name` 和 Job Service 发布的 `QueueEnvelope.queue_name` 匹配；CLI 和 runtime 都会 fail fast 校验；`redis_list` broker 不支持该链路。
 - `start-worker.sh` 是 Worker Pod 入口；`docker-compose.yml` 的 `worker` profile 可构建容器化 worker，不影响现有 API profile。
 
-Worker runtime 的运行入口、配置和 ack/no_ack broker 语义记录在 [`worker-runtime.md`](worker-runtime.md)。
+Worker runtime 的运行入口、配置和 ack/no_ack broker 语义记录在 [`worker-runtime.md`](worker-runtime.md)。作为可复制模板新增业务 task 的目录、manifest、幂等、input_ref/output_ref 和长任务规范记录在 [`worker-template.md`](worker-template.md)。
 
 ## Scripts And Verification
 

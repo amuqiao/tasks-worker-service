@@ -119,7 +119,7 @@ def _base_worker_manifest() -> dict[str, object]:
             {
                 "task_name": "example.task",
                 "task_version": 1,
-                "handler": "app.worker.task_modules.example:ExampleTaskHandler",
+                "handler": "app.worker.task_modules.example.handler:ExampleTaskHandler",
                 "input_schema": {"type": "object", "additionalProperties": True},
                 "output_schema": {"type": "object", "additionalProperties": True},
                 "timeout_seconds": 300,

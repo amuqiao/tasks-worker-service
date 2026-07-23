@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 from app.job_platform_worker.protocol import QueueEnvelope
+
+ProgressReporter = Callable[[int, str | None], Awaitable[None]]
+CancelChecker = Callable[[], bool]
+
+
+class WorkerCancelRequested(Exception):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -11,6 +19,20 @@ class WorkerContext:
     worker_service: str
     worker_name: str
     worker_session_id: str
+    progress_reporter: ProgressReporter | None = None
+    cancel_checker: CancelChecker | None = None
+
+    async def report_progress(self, percent: int, message: str | None = None) -> None:
+        if self.progress_reporter is None:
+            raise RuntimeError("progress reporting is not available outside a leased worker attempt")
+        await self.progress_reporter(percent, message)
+
+    def is_cancel_requested(self) -> bool:
+        return self.cancel_checker() if self.cancel_checker is not None else False
+
+    def raise_if_cancel_requested(self) -> None:
+        if self.is_cancel_requested():
+            raise WorkerCancelRequested("Job Service reported cancel_requested")
 
 
 @dataclass(frozen=True, slots=True)

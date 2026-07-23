@@ -1,6 +1,6 @@
 # Worker Runtime
 
-本文记录 `fastapi-lite` 当前 Worker runtime 的运行入口、配置和 broker ack 语义。未来业务 handler、执行表和业务侧幂等设计不写入本文。
+本文记录 `fastapi-lite` 当前 Worker runtime 的运行入口、配置和 broker ack 语义。业务 task 模板、幂等、input_ref/output_ref 和长任务写法见 [`worker-template.md`](worker-template.md)。
 
 ## Runtime Boundary
 
@@ -28,7 +28,7 @@ taskiq Redis Stream
 | `app.job_platform_worker.manifest` | 读取 `worker.manifest.json`，校验任务声明并按 handler path 构建 registry。 |
 | `app.job_platform_worker.registry` | 从 manifest 构建 handler registry，不手写业务 task 注册。 |
 | `app.job_platform_worker.register_cli` | 提供 `validate` / `render` / `register`，用于本地和 CI/CD 注册 Worker Manifest。 |
-| `app.worker.task_modules.example` | 示例业务 handler。 |
+| `app.worker.task_modules.example.handler` | 示例业务 handler。 |
 
 当前唯一支持的生产消费路径是 `python -m app.job_platform_worker.runner`，因为该入口直接控制 broker message ack。不要使用默认 `taskiq worker` 启动本服务的 Worker 消费进程。
 
@@ -80,7 +80,7 @@ Worker runtime 返回值与 broker 行为：
     {
       "task_name": "example.task",
       "task_version": 1,
-      "handler": "app.worker.task_modules.example:ExampleTaskHandler",
+      "handler": "app.worker.task_modules.example.handler:ExampleTaskHandler",
       "input_schema": {"type": "object", "additionalProperties": true},
       "output_schema": {"type": "object", "additionalProperties": true},
       "caller_bindings": [

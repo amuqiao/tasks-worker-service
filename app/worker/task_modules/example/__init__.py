@@ -1,0 +1,1 @@
+"""Example business task module."""

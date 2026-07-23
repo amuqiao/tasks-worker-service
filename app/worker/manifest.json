@@ -7,7 +7,7 @@
     {
       "task_name": "example.task",
       "task_version": 1,
-      "handler": "app.worker.task_modules.example:ExampleTaskHandler",
+      "handler": "app.worker.task_modules.example.handler:ExampleTaskHandler",
       "input_schema": {
         "type": "object",
         "additionalProperties": true
@@ -18,6 +18,69 @@
       },
       "timeout_seconds": 300,
       "max_retries": 1,
+      "retry_policy": {},
+      "idempotency_retention_seconds": 86400,
+      "required_worker_capabilities": ["cpu"],
+      "caller_bindings": [
+        {
+          "caller_service": "business-api-a",
+          "callback_url": null,
+          "compensation_window_seconds": 3600
+        }
+      ]
+    },
+    {
+      "task_name": "example.object_ref",
+      "task_version": 1,
+      "handler": "app.worker.task_modules.object_ref_example.handler:ObjectRefExampleHandler",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["ok", "idempotency_key", "source_uri", "result_uri"],
+        "properties": {
+          "ok": {"type": "boolean"},
+          "idempotency_key": {"type": "string"},
+          "source_uri": {"type": "string"},
+          "result_uri": {"type": "string"}
+        },
+        "additionalProperties": false
+      },
+      "timeout_seconds": 300,
+      "max_retries": 1,
+      "retry_policy": {},
+      "idempotency_retention_seconds": 86400,
+      "required_worker_capabilities": ["cpu"],
+      "caller_bindings": [
+        {
+          "caller_service": "business-api-a",
+          "callback_url": null,
+          "compensation_window_seconds": 3600
+        }
+      ]
+    },
+    {
+      "task_name": "example.long_running",
+      "task_version": 1,
+      "handler": "app.worker.task_modules.long_running_example.handler:LongRunningExampleHandler",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["ok", "steps_completed", "worker"],
+        "properties": {
+          "ok": {"type": "boolean"},
+          "steps_completed": {"type": "integer"},
+          "worker": {"type": "string"}
+        },
+        "additionalProperties": false
+      },
+      "timeout_seconds": 600,
+      "max_retries": 0,
       "retry_policy": {},
       "idempotency_retention_seconds": 86400,
       "required_worker_capabilities": ["cpu"],

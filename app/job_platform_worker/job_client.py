@@ -104,8 +104,14 @@ class JobServiceClient:
         envelope: QueueEnvelope,
         *,
         lease_token: str,
+        progress_percent: int | None = None,
+        progress_message: str | None = None,
     ) -> HeartbeatAttemptResponse:
-        payload = HeartbeatAttemptRequest(lease_token=lease_token)
+        payload = HeartbeatAttemptRequest(
+            lease_token=lease_token,
+            progress_percent=progress_percent,
+            progress_message=progress_message,
+        )
         data = await self._post(
             f"/attempts/{envelope.attempt_id}/heartbeat",
             payload.model_dump(mode="json"),

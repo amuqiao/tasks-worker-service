@@ -23,7 +23,7 @@ def _manifest_payload(**overrides) -> dict:
             {
                 "task_name": "example.task",
                 "task_version": 1,
-                "handler": "app.worker.task_modules.example:ExampleTaskHandler",
+                "handler": "app.worker.task_modules.example.handler:ExampleTaskHandler",
                 "input_schema": {"type": "object"},
                 "output_schema": {"type": "object"},
                 "caller_bindings": [
@@ -86,7 +86,7 @@ def test_worker_manifest_rejects_missing_handler_import(tmp_path: Path) -> None:
         tasks=[
             {
                 **_manifest_payload()["tasks"][0],
-                "handler": "app.worker.task_modules.example:MissingHandler",
+                "handler": "app.worker.task_modules.example.handler:MissingHandler",
             }
         ]
     )
@@ -127,3 +127,13 @@ async def test_manifest_registered_handler_can_execute() -> None:
     )
 
     assert result.output["ok"] is True
+
+
+def test_default_manifest_declares_template_example_tasks() -> None:
+    manifest = load_worker_manifest("app/worker/manifest.json")
+
+    assert {(task.task_name, task.task_version) for task in manifest.tasks} == {
+        ("example.task", 1),
+        ("example.object_ref", 1),
+        ("example.long_running", 1),
+    }
