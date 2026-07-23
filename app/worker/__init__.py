@@ -1,1 +1,1 @@
-"""Taskiq worker runtime for Job Platform queue envelopes."""
+"""Business worker manifest and task modules."""

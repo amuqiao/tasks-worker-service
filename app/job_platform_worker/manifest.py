@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import Field, model_validator
 
 from app.schemas.common import StrictBaseModel
-from app.worker.handlers import HandlerRegistry, TaskHandler
+from app.job_platform_worker.handlers import HandlerRegistry, TaskHandler
 
 
 class ManifestCallerBinding(StrictBaseModel):

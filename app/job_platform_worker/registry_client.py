@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
-from app.worker.protocol import (
+from app.job_platform_worker.protocol import (
     ErrorEnvelope,
     HEADER_AUTHORIZATION,
     HEADER_JOB_REQUEST_ID,

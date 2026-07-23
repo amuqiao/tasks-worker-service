@@ -5,10 +5,10 @@ from typing import Any
 import httpx
 
 from app.core.config import get_settings
-from app.worker.handlers import WorkerContext
-from app.worker.job_client import JobServiceClient
-from app.worker.registry import build_worker_registry
-from app.worker.runtime import WorkerRunResult, run_queue_envelope
+from app.job_platform_worker.handlers import WorkerContext
+from app.job_platform_worker.job_client import JobServiceClient
+from app.job_platform_worker.registry import build_worker_registry
+from app.job_platform_worker.runtime import WorkerRunResult, run_queue_envelope
 
 settings = get_settings()
 

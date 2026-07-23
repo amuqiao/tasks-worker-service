@@ -5,7 +5,7 @@ import uuid
 import httpx
 from pydantic import ValidationError
 
-from app.worker.protocol import (
+from app.job_platform_worker.protocol import (
     AcquireAttemptRequest,
     AcquireAttemptResponse,
     CompleteAttemptRequest,

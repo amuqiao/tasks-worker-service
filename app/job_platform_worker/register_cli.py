@@ -8,8 +8,8 @@ import sys
 import httpx
 
 from app.core.config import get_settings
-from app.worker.manifest import build_registry_from_manifest, load_worker_manifest, manifest_registration_payload, validate_manifest_runtime
-from app.worker.registry_client import JobServiceRegistryClient
+from app.job_platform_worker.manifest import build_registry_from_manifest, load_worker_manifest, manifest_registration_payload, validate_manifest_runtime
+from app.job_platform_worker.registry_client import JobServiceRegistryClient
 
 
 def _parser() -> argparse.ArgumentParser:

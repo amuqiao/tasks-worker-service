@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.worker.protocol import QueueEnvelope
+from app.job_platform_worker.protocol import QueueEnvelope
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +39,6 @@ class HandlerRegistry:
 
 
 def build_default_registry() -> HandlerRegistry:
-    from app.worker.registry import build_worker_registry
+    from app.job_platform_worker.registry import build_worker_registry
 
     return build_worker_registry()

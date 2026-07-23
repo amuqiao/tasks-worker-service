@@ -7,10 +7,10 @@ from typing import Any, Literal
 import httpx
 from pydantic import ValidationError
 
-from app.worker.handlers import HandlerRegistry, WorkerContext
-from app.worker.handlers import TaskHandler
-from app.worker.job_client import JobServiceApiError, JobServiceClient, JobServiceProtocolError
-from app.worker.protocol import AcquireAttemptResponse, QueueEnvelope
+from app.job_platform_worker.handlers import HandlerRegistry, WorkerContext
+from app.job_platform_worker.handlers import TaskHandler
+from app.job_platform_worker.job_client import JobServiceApiError, JobServiceClient, JobServiceProtocolError
+from app.job_platform_worker.protocol import AcquireAttemptResponse, QueueEnvelope
 
 AckDecision = Literal["ack", "no_ack"]
 

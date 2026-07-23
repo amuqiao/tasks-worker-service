@@ -7,8 +7,8 @@ from typing import Any
 from taskiq.abc.broker import AckableMessage
 
 from app.core.config import get_settings
-from app.worker.taskiq_app import broker
-from app.worker.taskiq_tasks import run_queue_envelope_with_settings
+from app.job_platform_worker.taskiq_app import broker
+from app.job_platform_worker.taskiq_tasks import run_queue_envelope_with_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

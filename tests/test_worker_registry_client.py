@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from app.worker.registry_client import JobServiceRegistryClient
+from app.job_platform_worker.registry_client import JobServiceRegistryClient
 
 
 async def test_registry_client_puts_manifest_with_registry_admin_auth() -> None:

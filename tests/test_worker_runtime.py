@@ -5,10 +5,10 @@ from typing import Any
 
 import httpx
 
-from app.worker.handlers import HandlerRegistry, HandlerResult, WorkerContext, build_default_registry
-from app.worker.job_client import JobServiceApiError
-from app.worker.protocol import AcquireAttemptResponse, ErrorEnvelope, QueueEnvelope
-from app.worker.runtime import run_queue_envelope
+from app.job_platform_worker.handlers import HandlerRegistry, HandlerResult, WorkerContext, build_default_registry
+from app.job_platform_worker.job_client import JobServiceApiError
+from app.job_platform_worker.protocol import AcquireAttemptResponse, ErrorEnvelope, QueueEnvelope
+from app.job_platform_worker.runtime import run_queue_envelope
 
 HASH = "jsonschema-jcs-v1:sha256:" + "a" * 64
 

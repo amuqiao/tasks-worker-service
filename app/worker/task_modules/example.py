@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.worker.handlers import HandlerResult, WorkerContext
-from app.worker.protocol import QueueEnvelope
+from app.job_platform_worker.handlers import HandlerResult, WorkerContext
+from app.job_platform_worker.protocol import QueueEnvelope
 
 
 class ExampleTaskHandler:

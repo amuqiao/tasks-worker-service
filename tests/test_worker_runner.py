@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from app.worker.runner import handle_message
-from app.worker.runtime import WorkerRunResult
+from app.job_platform_worker.runner import handle_message
+from app.job_platform_worker.runtime import WorkerRunResult
 
 
 @dataclass
@@ -24,7 +24,7 @@ async def test_runner_acks_when_runtime_returns_ack(monkeypatch: pytest.MonkeyPa
     async def fake_run(payload: dict[str, Any]) -> WorkerRunResult:
         return WorkerRunResult(ack_decision="ack", status="completed", details={})
 
-    monkeypatch.setattr("app.worker.runner.run_queue_envelope_with_settings", fake_run)
+    monkeypatch.setattr("app.job_platform_worker.runner.run_queue_envelope_with_settings", fake_run)
 
     handled = await handle_message(message)  # type: ignore[arg-type]
 
@@ -38,7 +38,7 @@ async def test_runner_does_not_ack_when_runtime_returns_no_ack(monkeypatch: pyte
     async def fake_run(payload: dict[str, Any]) -> WorkerRunResult:
         return WorkerRunResult(ack_decision="no_ack", status="acquire_unknown", details={})
 
-    monkeypatch.setattr("app.worker.runner.run_queue_envelope_with_settings", fake_run)
+    monkeypatch.setattr("app.job_platform_worker.runner.run_queue_envelope_with_settings", fake_run)
 
     handled = await handle_message(message)  # type: ignore[arg-type]
 
@@ -56,7 +56,7 @@ async def test_runner_acks_poison_taskiq_message() -> None:
 
 
 def _message_data(payload: dict[str, Any]) -> bytes:
-    from app.worker.taskiq_app import broker
+    from app.job_platform_worker.taskiq_app import broker
     from taskiq.message import TaskiqMessage
 
     return broker.formatter.dumps(

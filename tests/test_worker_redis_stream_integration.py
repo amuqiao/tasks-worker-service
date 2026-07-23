@@ -12,8 +12,8 @@ from taskiq.abc.broker import AckableMessage
 from taskiq.message import TaskiqMessage
 from taskiq_redis import RedisStreamBroker
 
-from app.worker.runner import handle_message
-from app.worker.runtime import WorkerRunResult
+from app.job_platform_worker.runner import handle_message
+from app.job_platform_worker.runtime import WorkerRunResult
 
 
 pytestmark = [
@@ -37,7 +37,7 @@ async def test_redis_stream_broker_ack_clears_pending_message(monkeypatch: pytes
         async def fake_run(payload: dict[str, Any]) -> WorkerRunResult:
             return WorkerRunResult(ack_decision="ack", status="completed", details={"payload": payload})
 
-        monkeypatch.setattr("app.worker.runner.run_queue_envelope_with_settings", fake_run)
+        monkeypatch.setattr("app.job_platform_worker.runner.run_queue_envelope_with_settings", fake_run)
         await _kick(broker, queue_name, {"attempt_id": "attempt-1"})
         async with _listen_once(broker) as message:
             handled = await handle_message(message)
@@ -66,7 +66,7 @@ async def test_redis_stream_broker_unacked_message_can_be_reclaimed(monkeypatch:
         async def fake_no_ack(payload: dict[str, Any]) -> WorkerRunResult:
             return WorkerRunResult(ack_decision="no_ack", status="acquire_unknown", details={"payload": payload})
 
-        monkeypatch.setattr("app.worker.runner.run_queue_envelope_with_settings", fake_no_ack)
+        monkeypatch.setattr("app.job_platform_worker.runner.run_queue_envelope_with_settings", fake_no_ack)
         await _kick(producer, queue_name, {"attempt_id": "attempt-2"})
         async with _listen_once(producer) as first_message:
             first_payload = first_message.data
@@ -79,7 +79,7 @@ async def test_redis_stream_broker_unacked_message_can_be_reclaimed(monkeypatch:
         async def fake_ack(payload: dict[str, Any]) -> WorkerRunResult:
             return WorkerRunResult(ack_decision="ack", status="completed", details={"payload": payload})
 
-        monkeypatch.setattr("app.worker.runner.run_queue_envelope_with_settings", fake_ack)
+        monkeypatch.setattr("app.job_platform_worker.runner.run_queue_envelope_with_settings", fake_ack)
         await asyncio.sleep(0.01)
         async with _listen_once(reclaimer) as reclaimed_message:
             assert reclaimed_message.data == first_payload

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from app.core.config import get_settings
-from app.worker.handlers import HandlerRegistry
-from app.worker.manifest import build_registry_from_manifest, load_worker_manifest, validate_manifest_runtime
+from app.job_platform_worker.handlers import HandlerRegistry
+from app.job_platform_worker.manifest import build_registry_from_manifest, load_worker_manifest, validate_manifest_runtime
 
 
 def build_worker_registry(manifest_path: str | None = None) -> HandlerRegistry:

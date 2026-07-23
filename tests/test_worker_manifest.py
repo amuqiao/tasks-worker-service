@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.worker.manifest import build_registry_from_manifest, load_worker_manifest, validate_manifest_runtime
-from app.worker.protocol import QueueEnvelope
-from app.worker.registry import build_worker_registry
+from app.job_platform_worker.manifest import build_registry_from_manifest, load_worker_manifest, validate_manifest_runtime
+from app.job_platform_worker.protocol import QueueEnvelope
+from app.job_platform_worker.registry import build_worker_registry
 
 HASH = "jsonschema-jcs-v1:sha256:" + "a" * 64
 
@@ -102,7 +102,7 @@ async def test_manifest_registered_handler_can_execute() -> None:
     handler = registry.get("example.task", 1)
     assert handler is not None
 
-    from app.worker.handlers import WorkerContext
+    from app.job_platform_worker.handlers import WorkerContext
 
     result = await handler.handle(
         QueueEnvelope(

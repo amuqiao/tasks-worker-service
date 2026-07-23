@@ -8,8 +8,8 @@ from types import ModuleType
 import pytest
 from pydantic import ValidationError
 
-from app.worker.manifest import WorkerManifest
-from app.worker.protocol import QueueEnvelope
+from app.job_platform_worker.manifest import WorkerManifest
+from app.job_platform_worker.protocol import QueueEnvelope
 
 
 def test_worker_queue_envelope_matches_job_platform_protocol() -> None:
