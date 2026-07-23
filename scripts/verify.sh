@@ -12,10 +12,11 @@ Usage:
   ./scripts/verify.sh -h|--help
 
 职责:
-  一次性验证入口。负责 env、syntax、registry、Alembic、脚本 smoke、pytest、显式 PostgreSQL integration gate 和显式 Redis Stream broker gate。
+  一次性验证入口。负责 env、syntax、registry、Alembic、脚本 smoke、pytest、显式 PostgreSQL integration gate、显式 Redis Stream broker gate 和可选跨仓 Job Platform smoke。
 
 不负责:
-  不启动或停止本地服务；不连接生产数据库；不管理远端资源。
+  默认 check/env/registry/syntax/alembic/scripts/tests 不启动或停止本地服务；显式 job-platform-smoke 会启动临时本地 Job Service API 和 Worker runner。
+  不连接生产数据库；不管理远端资源。
 
 命令:
   check       Run the default skeleton verification gate
@@ -26,6 +27,7 @@ Usage:
   tests       Run pytest
   postgres    Run gated PostgreSQL integration checks
   redis-stream Run gated Redis Stream broker integration checks
+  job-platform-smoke Run optional cross-repo Job Platform smoke
   migration-roundtrip Run upgrade/downgrade/re-upgrade against a temporary local PostgreSQL database
   scripts     Check script entrypoints
   help        Show this help
@@ -47,6 +49,7 @@ Usage:
   ./scripts/verify.sh registry
   ./scripts/verify.sh postgres
   FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
+  ./scripts/verify.sh job-platform-smoke
   ./scripts/verify.sh migration-roundtrip
 
 Exit Codes:
@@ -158,6 +161,26 @@ Usage:
   FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
 EOF
       ;;
+    job-platform-smoke)
+      cat <<'EOF'
+Usage:
+  ./scripts/verify.sh job-platform-smoke
+
+职责:
+  调用 scripts/smoke-job-platform.sh run，对当前 Worker 模板和本地 tasks-platform Job Service 做跨仓 smoke。
+
+配置与环境变量:
+  见 ./scripts/smoke-job-platform.sh help。默认使用本地 Job Service repo、PostgreSQL、Redis 和端口。
+
+副作用与保护边界:
+  会对 JOB_PLATFORM_DATABASE_URL 执行 Job Service Alembic migration。
+  会启动临时 Job Service API 和 Worker runner，并在退出时清理本脚本启动的进程。
+  不启动 PostgreSQL / Redis，不修改 tasks-platform 代码。
+
+常用示例:
+  ./scripts/verify.sh job-platform-smoke
+EOF
+      ;;
     *)
       usage >&2
       return 2
@@ -235,6 +258,13 @@ case "$cmd" in
     fi
     uv run pytest -m redis_stream_integration
     ;;
+  job-platform-smoke)
+    shift
+    if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
+    reject_extra_args "usage: ./scripts/verify.sh job-platform-smoke" "$@"
+    cd "$ROOT_DIR"
+    ./scripts/smoke-job-platform.sh run
+    ;;
   migration-roundtrip)
     shift
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
@@ -251,6 +281,7 @@ case "$cmd" in
     bash -n scripts/deploy.sh
     bash -n scripts/k8s.sh
     bash -n scripts/verify.sh
+    bash -n scripts/smoke-job-platform.sh
     bash -n start-worker.sh
     bash -n scripts/tools.sh
     bash -n scripts/lib/compose.sh
@@ -262,6 +293,7 @@ case "$cmd" in
     ./scripts/deploy.sh modes >/dev/null
     ./scripts/k8s.sh help >/dev/null
     ./scripts/verify.sh help >/dev/null
+    ./scripts/smoke-job-platform.sh help >/dev/null
     ./scripts/tools.sh help >/dev/null
     ./scripts/tools.sh secret --prefix test_ >/dev/null
     echo "OK scripts"

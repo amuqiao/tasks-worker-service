@@ -1,6 +1,6 @@
 # Worker Template
 
-本文说明当前仓库作为 Job Platform Worker 模板时的目录边界、业务 task 接入方式、注册流程和验收要求。
+本文说明当前仓库作为 Job Platform Worker 模板时的目录边界、业务 task 接入方式、注册流程和验收要求。读者应该能按本文复制模板、添加一个业务 task、注册到 Job Service，并用跨服务 smoke 验证链路。
 
 ## 整体模型
 
@@ -28,6 +28,39 @@ app/job_platform_worker/
 ```
 
 `app/job_platform_worker/` 不是 SDK 包；它是短期可复制的公共模板层。未来如果引入 Job Platform SDK，优先替换这个目录内部实现，业务层保持稳定。
+
+## 模板收口边界
+
+当前模板按“公共对接层固定、业务 task 层扩展”的方式收口：
+
+```text
+复制模板后必须按业务调整
+  app/worker/manifest.json
+  app/worker/task_modules/<business_task>/
+
+复制模板后通常保持不变
+  app/job_platform_worker/
+  scripts/smoke-job-platform.sh
+  start-worker.sh
+```
+
+业务团队新增 task 时，不需要修改 Job Service 代码，也不需要在 `app/job_platform_worker/` 手写注册逻辑。Job Service 只通过 Worker Manifest Registry API 接收能力声明；Worker runtime 只通过 manifest import 对应 handler。
+
+`scripts/smoke-job-platform.sh` 作为脚本通常保持不变，但 smoke 的目标 task 和输入由环境变量选择。默认目标是模板示例 `example.task@v1`；真实业务移除示例 task 后，应设置 `WORKER_SMOKE_SOURCE_TASK_NAME`、`WORKER_SMOKE_SOURCE_TASK_VERSION` 和 `WORKER_SMOKE_INPUT_JSON`。
+
+推荐新业务复制路径：
+
+```text
+1. 复制 app/worker/task_modules/example/ 为业务目录。
+2. 修改 schemas.py，定义业务输入输出。
+3. 修改 service.py，接入算法、外部系统或对象存储。
+4. 修改 handler.py，只保留 envelope/context 到 service 的适配。
+5. 在 app/worker/manifest.json 新增 task 声明。
+6. 运行 register_cli validate。
+7. 向 Job Service register manifest。
+8. 启动 worker runner。
+9. 由业务 API 调用 Job Service POST /v1/jobs 提交已注册 task。
+```
 
 ## 目录职责
 
@@ -298,6 +331,69 @@ FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:36379/0 ./scripts/verify.sh redi
 4. Worker runner 消费并 complete
 5. GET /v1/jobs/{run_id} 确认为 succeeded
 ```
+
+当前仓库提供可选脚本入口：
+
+```bash
+./scripts/smoke-job-platform.sh check
+./scripts/smoke-job-platform.sh run
+```
+
+也可以通过统一验证入口调用：
+
+```bash
+./scripts/verify.sh job-platform-smoke
+```
+
+该 smoke 默认指向本地 `tasks-platform` 仓库，并默认启动自己的临时 Job Service API：
+
+```dotenv
+JOB_PLATFORM_REPO=/Users/admin/Code/tasks-platform
+JOB_PLATFORM_BASE_URL=http://127.0.0.1:8110
+JOB_PLATFORM_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:25433/job_platform
+JOB_PLATFORM_REDIS_URL=redis://127.0.0.1:26380/0
+```
+
+如果 `JOB_PLATFORM_BASE_URL` 上已经有 ready 的 Job Service，脚本默认拒绝复用，避免“API、dispatcher、DB、Redis 不是同一套环境”的误测。确认现有 API 与当前 `JOB_PLATFORM_REPO`、`JOB_PLATFORM_DATABASE_URL`、`JOB_PLATFORM_REDIS_URL` 完全一致后，才设置：
+
+```dotenv
+JOB_PLATFORM_REUSE_API=true
+```
+
+默认 smoke task 配置：
+
+```dotenv
+WORKER_SMOKE_SOURCE_TASK_NAME=example.task
+WORKER_SMOKE_SOURCE_TASK_VERSION=1
+WORKER_SMOKE_TASK_NAME=worker_template_smoke.example.task
+WORKER_SMOKE_TASK_VERSION=1
+WORKER_SMOKE_INPUT_JSON={"message":"hello from worker template smoke"}
+```
+
+真实业务模板可以不改脚本，只改这些变量。例如：
+
+```dotenv
+WORKER_SMOKE_SOURCE_TASK_NAME=audio.transcribe
+WORKER_SMOKE_SOURCE_TASK_VERSION=1
+WORKER_SMOKE_TASK_NAME=worker_template_smoke.audio.transcribe
+WORKER_SMOKE_INPUT_JSON={"audio_uri":"s3://dev-smoke/input.wav"}
+```
+
+脚本会：
+
+```text
+1. 校验本地工具、两个仓库路径和本地 URL。
+2. 对 Job Service 数据库执行 alembic upgrade head。
+3. 默认启动临时 Job Service API；除非显式允许，否则不复用已有 API。
+4. 从 manifest 中选择指定 source task，渲染单 task smoke manifest，注册到 Job Service。
+5. 启动当前 Worker runner。
+6. 使用 `WORKER_SMOKE_INPUT_JSON` 或 `WORKER_SMOKE_INPUT_REF_JSON` 创建 smoke job。
+7. 调用 Job Service dispatcher once。
+8. 轮询 Job Service，直到 job succeeded。
+9. 清理本脚本启动的临时进程。
+```
+
+脚本不启动 PostgreSQL / Redis，也不修改 `tasks-platform` 代码。PostgreSQL 和 Redis 必须提前由本地 compose、现有服务或外部开发环境提供。
 
 ## 未来 SDK 切换
 

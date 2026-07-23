@@ -117,6 +117,7 @@ route
 - `app/job_platform_worker/runner.py` 直接使用 taskiq Redis Stream broker `listen()`，只在 runtime 返回 `ack` 时调用 broker message `ack()`；`no_ack` 不会走默认 `taskiq worker` 的隐式 ack 路径。
 - `TASKIQ__QUEUE_NAME` 是 Worker 监听的物理 Redis Stream，必须与 manifest `queue_name` 和 Job Service 发布的 `QueueEnvelope.queue_name` 匹配；CLI 和 runtime 都会 fail fast 校验；`redis_list` broker 不支持该链路。
 - `start-worker.sh` 是 Worker Pod 入口；`docker-compose.yml` 的 `worker` profile 可构建容器化 worker，不影响现有 API profile。
+- `scripts/smoke-job-platform.sh` 是可选跨仓 smoke 入口，使用当前 Worker manifest 注册到本地 `tasks-platform`，提交 job，调用 Job Service dispatcher，并等待当前 Worker runner complete。
 
 Worker runtime 的运行入口、配置和 ack/no_ack broker 语义记录在 [`worker-runtime.md`](worker-runtime.md)。作为可复制模板新增业务 task 的目录、manifest、幂等、input_ref/output_ref 和长任务规范记录在 [`worker-template.md`](worker-template.md)。
 
@@ -136,11 +137,13 @@ Worker runtime 的运行入口、配置和 ack/no_ack broker 语义记录在 [`w
 - `./scripts/verify.sh check`
 - `./scripts/verify.sh postgres`
 - `./scripts/verify.sh redis-stream`
+- `./scripts/verify.sh job-platform-smoke`
 - `./scripts/verify.sh migration-roundtrip`
+- `./scripts/smoke-job-platform.sh check|run`
 - `./scripts/tools.sh secret`
 - `./scripts/tools.sh env-url`
 
-`dev.sh` 当前提供本地 API 进程管理、端口扫描、环境检查、迁移和测试快捷入口。`deploy.sh` 当前提供三种基础部署模型：`local` 委托 `dev.sh`，`compose-deps` 管理 PostgreSQL / Redis，`compose-full` 管理 API / PostgreSQL / Redis，并通过 `start-api.sh` 作为 API 容器入口；worker profile 使用 `start-worker.sh` 作为 Worker 容器入口。`verify.sh check` 当前覆盖 env、syntax、registry、alembic、scripts 和 pytest；`postgres` 与 `migration-roundtrip` 是显式 PostgreSQL gate，`redis-stream` 是显式 Redis Stream broker gate。`tools.sh` 当前提供无默认持久副作用的 secret 和 env URL 生成工具。
+`dev.sh` 当前提供本地 API 进程管理、端口扫描、环境检查、迁移和测试快捷入口。`deploy.sh` 当前提供三种基础部署模型：`local` 委托 `dev.sh`，`compose-deps` 管理 PostgreSQL / Redis，`compose-full` 管理 API / PostgreSQL / Redis，并通过 `start-api.sh` 作为 API 容器入口；worker profile 使用 `start-worker.sh` 作为 Worker 容器入口。`verify.sh check` 当前覆盖 env、syntax、registry、alembic、scripts 和 pytest；`postgres` 与 `migration-roundtrip` 是显式 PostgreSQL gate，`redis-stream` 是显式 Redis Stream broker gate，`job-platform-smoke` 是显式跨仓 Job Service gate。`tools.sh` 当前提供无默认持久副作用的 secret 和 env URL 生成工具。
 
 ## Verification Baseline
 
@@ -157,4 +160,11 @@ PostgreSQL 集成测试和 migration roundtrip 是显式 gate：
 ./scripts/verify.sh postgres
 ./scripts/verify.sh migration-roundtrip
 FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
+```
+
+跨仓 Job Service smoke 是显式 gate：
+
+```bash
+./scripts/smoke-job-platform.sh check
+./scripts/verify.sh job-platform-smoke
 ```

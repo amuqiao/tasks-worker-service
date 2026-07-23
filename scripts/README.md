@@ -7,9 +7,10 @@
 | Entry | Scope |
 |---|---|
 | `dev.sh` | 本地开发：bootstrap、doctor、端口扫描、API 生命周期、迁移和测试快捷入口。 |
-| `verify.sh` | 一次性验证：env、syntax、registry、Alembic、脚本 smoke、pytest、PostgreSQL integration gate、migration roundtrip gate。 |
+| `verify.sh` | 一次性验证：env、syntax、registry、Alembic、脚本 smoke、pytest、PostgreSQL integration gate、Redis Stream gate、migration roundtrip gate、可选 Job Platform smoke。 |
 | `deploy.sh` | 运行模型入口：dev、local、compose-deps、compose-full；`down all` 显式全量停止。 |
 | `k8s.sh` | K8s Pod 内运维：配置、PostgreSQL、应用健康、Alembic 状态和手动迁移检查。 |
+| `smoke-job-platform.sh` | 跨仓 smoke：当前 Worker 模板注册到本地 `tasks-platform`，提交 job，dispatch，并等待 worker complete。 |
 | `tools.sh` | 无默认持久副作用工具：secret 生成、DATABASE__URL / REDIS__URL 编码。 |
 
 ## Shared Helpers
@@ -44,6 +45,7 @@
 ./scripts/deploy.sh down all
 ./scripts/tools.sh secret
 ./scripts/verify.sh check
+./scripts/smoke-job-platform.sh check
 ./scripts/deploy.sh check
 kubectl exec -it <api-pod> -- ./scripts/k8s.sh check
 ```

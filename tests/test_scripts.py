@@ -53,7 +53,14 @@ def script_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
 
 
 def test_script_help_commands_work():
-    for script in ("./scripts/dev.sh", "./scripts/deploy.sh", "./scripts/k8s.sh", "./scripts/verify.sh", "./scripts/tools.sh"):
+    for script in (
+        "./scripts/dev.sh",
+        "./scripts/deploy.sh",
+        "./scripts/k8s.sh",
+        "./scripts/verify.sh",
+        "./scripts/smoke-job-platform.sh",
+        "./scripts/tools.sh",
+    ):
         result = run_script(script, "help")
         assert result.returncode == 0
         assert "Usage:" in result.stdout
@@ -65,6 +72,22 @@ def test_script_unknown_command_fails():
 
     assert result.returncode == 2
     assert "unknown command" in result.stderr
+
+
+def test_smoke_job_platform_unknown_command_fails():
+    result = run_script("./scripts/smoke-job-platform.sh", "missing")
+
+    assert result.returncode == 2
+    assert "unknown command" in result.stderr
+
+
+def test_smoke_job_platform_script_does_not_depend_on_first_manifest_task():
+    body = (ROOT_DIR / "scripts" / "smoke-job-platform.sh").read_text(encoding="utf-8")
+
+    assert 'manifest["tasks"][0]' not in body
+    assert "data.output.worker" not in body
+    assert "WORKER_SMOKE_SOURCE_TASK_NAME" in body
+    assert "WORKER_SMOKE_INPUT_JSON" in body
 
 
 def test_script_unexpected_argument_fails():
@@ -81,6 +104,15 @@ def test_verify_subcommand_help_does_not_execute_task():
     assert "Usage:" in result.stdout
     assert "专用 PostgreSQL _test 数据库" in result.stdout
     assert "OK test-database" not in result.stdout
+
+
+def test_verify_job_platform_smoke_help_does_not_execute_task():
+    result = run_script("./scripts/verify.sh", "job-platform-smoke", "--help")
+
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "跨仓 smoke" in result.stdout
+    assert "Smoke Prerequisites" not in result.stdout
 
 
 def test_verify_postgres_rejects_non_test_database_with_config_exit_code():

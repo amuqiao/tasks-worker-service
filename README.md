@@ -14,6 +14,7 @@
 - lifecycle providers：Postgres、Redis fake boundary、object storage、shared HTTP client。
 - Job Platform worker runtime：`QueueEnvelope` consumer、Worker Internal API client、handler registry 和 taskiq adapter。
 - Worker 使用 Redis Stream taskiq broker，按 `TASKIQ__QUEUE_NAME` 监听物理队列，并由自有 runner 显式控制 ack。
+- Worker 模板接入规范：manifest 注册、业务 task 目录、input_ref/output_ref、幂等、progress/cancel 和跨仓 Job Service smoke。
 - `app/tools/` 示例工具模块。
 - `dev.sh`、`deploy.sh`、`verify.sh`、`tools.sh` 脚本入口。
 - 脚本公共能力：`doctor`、端口扫描、PID/log 管理、三模式部署入口、迁移入口、secret/env-url 工具、registry/env/docs drift gate。
@@ -83,6 +84,13 @@ Run the Job Platform worker on the host:
 ./start-worker.sh
 ```
 
+Check the Worker template and optional Job Service smoke entry:
+
+```bash
+uv run python -m app.job_platform_worker.register_cli validate
+./scripts/smoke-job-platform.sh check
+```
+
 Generate local secrets and encoded connection URLs:
 
 ```bash
@@ -93,6 +101,8 @@ Generate local secrets and encoded connection URLs:
 ## Documentation
 
 - Current implementation facts: [`docs/current/implementation.md`](docs/current/implementation.md)
+- Worker runtime: [`docs/current/worker-runtime.md`](docs/current/worker-runtime.md)
+- Worker template guide: [`docs/current/worker-template.md`](docs/current/worker-template.md)
 - HTTP API contract: [`docs/contracts/api-contract.md`](docs/contracts/api-contract.md)
 - Extension contract: [`docs/contracts/extension-contract.md`](docs/contracts/extension-contract.md)
 - Drift checklist and P1 plan: [`docs/plans/drift-checklist.md`](docs/plans/drift-checklist.md)
@@ -119,4 +129,10 @@ Migration roundtrip gate:
 
 ```bash
 ./scripts/verify.sh migration-roundtrip
+```
+
+Optional cross-repo Job Platform smoke:
+
+```bash
+./scripts/verify.sh job-platform-smoke
 ```
