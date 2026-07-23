@@ -570,7 +570,22 @@ def test_deploy_compose_subcommand_help():
     assert "compose-full" in result.stdout
 
 
-def test_deploy_down_without_mode_stops_all_in_order(tmp_path):
+def test_deploy_down_without_mode_requires_explicit_target(tmp_path):
+    result = subprocess.run(
+        ["./scripts/deploy.sh", "down"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path),
+    )
+
+    assert result.returncode == 2
+    assert "usage: ./scripts/deploy.sh down <dev|local|compose-deps|compose-full|all>" in result.stderr
+    assert result.stdout == ""
+
+
+def test_deploy_down_all_stops_local_then_compose_once(tmp_path):
     bin_dir = tmp_path / "bin"
     log_file = tmp_path / "calls.log"
     bin_dir.mkdir()
@@ -594,7 +609,7 @@ exit 1
     docker.chmod(0o755)
 
     result = subprocess.run(
-        ["./scripts/deploy.sh", "down"],
+        ["./scripts/deploy.sh", "down", "all"],
         cwd=ROOT_DIR,
         text=True,
         capture_output=True,
@@ -609,11 +624,11 @@ exit 1
     assert "Deploy Down All" in result.stdout
     assert "STOPPED" in result.stdout
     calls = log_file.read_text().splitlines()
+    assert len(calls) == 1
     assert "--profile app stop api postgres redis" in calls[0]
-    assert calls[1].endswith("stop postgres redis")
 
 
-def test_deploy_down_without_mode_fails_when_compose_is_unavailable(tmp_path):
+def test_deploy_down_all_fails_when_compose_is_unavailable_after_local_stop(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     docker = bin_dir / "docker"
@@ -625,7 +640,7 @@ exit 127
     docker.chmod(0o755)
 
     result = subprocess.run(
-        ["./scripts/deploy.sh", "down"],
+        ["./scripts/deploy.sh", "down", "all"],
         cwd=ROOT_DIR,
         text=True,
         capture_output=True,

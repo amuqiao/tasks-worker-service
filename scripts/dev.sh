@@ -16,7 +16,8 @@ Usage:
   本地开发入口。管理当前仓库的 FastAPI API 进程、开发依赖检查、迁移、端口扫描和测试快捷命令。
 
 不负责:
-  不管理生产部署、远端资源、真实 Redis/S3 adapter、业务 worker 或跨仓库服务。
+  不管理 Docker/Compose PostgreSQL、Redis、生产部署、远端资源、真实 Redis/S3 adapter、业务 worker 或跨仓库服务。
+  Docker 依赖和 compose-full 生命周期请使用 ./scripts/deploy.sh。
 
 运行环境:
   Requires: Bash, uv, Python.
@@ -29,7 +30,7 @@ Usage:
   start api        后台启动 FastAPI API。
   stop [api]       停止后台 API；省略 api 时等价于 stop api。
   restart [api]    重启后台 API；省略 api 时等价于 restart api。
-  status           展示 API 进程、端口、URL、配置文件和日志路径。
+  status           展示本地 API 进程、端口、URL、配置文件和日志路径。
   logs             tail API 日志。
   migrate          对当前 DATABASE__URL 执行 Alembic upgrade head。
   ports [ports...] 扫描本地端口；支持 --ports、端口范围、--json。
@@ -54,6 +55,7 @@ Usage:
   bootstrap 会创建 .env 并同步依赖。
   start/restart 会启动本地后台进程，并拒绝占用中的 API_PORT。
   stop 会停止本脚本 PID 文件记录的 API 进程。
+  start/stop/restart/status 只管理本地 API，不启动或停止 Docker PostgreSQL/Redis。
   migrate 会写入 DATABASE__URL 指向的数据库，执行前会拒绝明显非本地 URL。
   doctor/status/ports 不修改服务状态。
 
@@ -65,8 +67,19 @@ Usage:
   ./scripts/dev.sh bootstrap
   ./scripts/dev.sh doctor
   ./scripts/dev.sh ports 8100 25432 26379
-  ./scripts/dev.sh start api
-  ./scripts/dev.sh status
+
+  # 常见本地开发：Docker 依赖 + 本地 API。
+  ./scripts/deploy.sh up dev
+  ./scripts/deploy.sh status dev
+  ./scripts/deploy.sh down dev
+
+  # 精确控制：只操作本地 API 或 Docker 依赖。
+  ./scripts/dev.sh restart api
+  ./scripts/dev.sh stop api
+  ./scripts/deploy.sh status compose-deps
+
+  # 停止本仓库全部 local/compose 服务。
+  ./scripts/deploy.sh down all
 
 Exit Codes:
   0  成功
@@ -122,11 +135,12 @@ Usage:
   ./scripts/dev.sh ${name} ${usage_target}
 
 职责:
-  执行 API 生命周期子命令 ${name}。查看顶层 help 获取完整配置、输出和退出码合同。
+  执行本地 API 生命周期子命令 ${name}。查看顶层 help 获取完整配置、输出和退出码合同。
 
 副作用与保护边界:
   start/restart 会启动本地后台进程，并拒绝占用中的 API_PORT。
   stop 只会停止本脚本启动且 PID/metadata 匹配的 API 进程。
+  ${name} 不启动或停止 Docker PostgreSQL/Redis；依赖容器请使用 ./scripts/deploy.sh。
   PID 文件陈旧或 PID 不属于当前仓库 uvicorn 时，不会 kill 该进程。
 
 常用示例:
@@ -275,6 +289,7 @@ run_api() {
   assert_no_compose_full_api_running_for_local
   assert_api_port_free_for_run
   cd "$ROOT_DIR"
+  event "RUN" "api" "url=$API_URL docs=$API_DOCS_URL"
   exec uv run uvicorn app.main:app --host "$API_HOST" --port "$API_PORT" --reload
 }
 
@@ -283,7 +298,7 @@ start_api() {
   local pid
   validate_port API_PORT "$API_PORT"
   if api_running; then
-    event "RUNNING" "api" "pid=$(api_pid) url=$API_URL"
+    event "RUNNING" "api" "pid=$(api_pid) url=$API_URL docs=$API_DOCS_URL"
     return 0
   fi
   require_uv
@@ -309,7 +324,7 @@ start_api() {
     rm -f "$API_META_FILE"
     die "api failed to stay running; inspect: ./scripts/dev.sh logs" 4
   fi
-  event "STARTED" "api" "pid=$(api_pid) url=$API_URL log=$API_LOG_FILE"
+  event "STARTED" "api" "pid=$(api_pid) url=$API_URL docs=$API_DOCS_URL log=$API_LOG_FILE"
   wait_for_api 20
 }
 
@@ -334,12 +349,15 @@ stop_api() {
 
 status_api() {
   section "API"
+  row "scope" "local-only" "Docker deps: ./scripts/deploy.sh status compose-deps"
   if api_running; then
     row "process" "running" "pid=$(api_pid)"
   else
     row "process" "stopped" "-"
   fi
   row "url" "configured" "$API_URL"
+  row "docs" "configured" "$API_DOCS_URL"
+  row "openapi" "configured" "$API_OPENAPI_URL"
   row "health" "configured" "$API_HEALTH_URL"
   row "pid_file" "path" "$API_PID_FILE"
   row "log_file" "path" "$API_LOG_FILE"

@@ -49,18 +49,24 @@ Scan common local ports:
 ./scripts/dev.sh ports 8100 25432 26379
 ```
 
-Run the API locally:
+Start the common local development stack:
 
 ```bash
-./scripts/dev.sh start api
+./scripts/deploy.sh up dev
 ```
 
-The app process can start without opening a database connection, but `/ready` and the `items` API require a reachable PostgreSQL database unless tests inject a session override.
+This starts PostgreSQL and Redis with Docker Compose, then starts the FastAPI app on the host. The app process can start without opening a database connection, but `/ready` and the `items` API require a reachable PostgreSQL database unless tests inject a session override.
 
-Start local dependencies with Docker Compose:
+Run only local dependencies with Docker Compose:
 
 ```bash
 ./scripts/deploy.sh up compose-deps
+```
+
+Run only the host API:
+
+```bash
+./scripts/dev.sh start api
 ```
 
 Run the API, PostgreSQL, and Redis in Compose:
