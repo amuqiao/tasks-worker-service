@@ -12,7 +12,7 @@ Usage:
   ./scripts/verify.sh -h|--help
 
 职责:
-  一次性验证入口。负责 env、syntax、registry、Alembic、脚本 smoke、pytest 和显式 PostgreSQL integration gate。
+  一次性验证入口。负责 env、syntax、registry、Alembic、脚本 smoke、pytest、显式 PostgreSQL integration gate 和显式 Redis Stream broker gate。
 
 不负责:
   不启动或停止本地服务；不连接生产数据库；不管理远端资源。
@@ -25,6 +25,7 @@ Usage:
   alembic     Check Alembic heads and offline SQL
   tests       Run pytest
   postgres    Run gated PostgreSQL integration checks
+  redis-stream Run gated Redis Stream broker integration checks
   migration-roundtrip Run upgrade/downgrade/re-upgrade against a temporary local PostgreSQL database
   scripts     Check script entrypoints
   help        Show this help
@@ -36,6 +37,7 @@ Usage:
 副作用与保护边界:
   check/env/registry/syntax/alembic/scripts/tests 不启动服务。
   postgres 会对 DATABASE__URL 指向的专用 _test 数据库执行迁移和集成测试；非 _test 数据库会失败。
+  redis-stream 只连接 FASTAPI_LITE_REDIS_STREAM_URL 指向的 Redis，并使用测试专用 stream/group。
 
 成功标准:
   check 成功 = env、syntax、registry、alembic、scripts、tests 全部通过。
@@ -44,6 +46,7 @@ Usage:
   ./scripts/verify.sh check
   ./scripts/verify.sh registry
   ./scripts/verify.sh postgres
+  FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
   ./scripts/verify.sh migration-roundtrip
 
 Exit Codes:
@@ -136,6 +139,25 @@ Exit Codes:
   其他非 0 由 Alembic / pytest / database driver 透传
 EOF
       ;;
+    redis-stream)
+      cat <<'EOF'
+Usage:
+  FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
+
+职责:
+  对真实 Redis Stream broker 运行 Worker taskiq ack/no_ack 集成测试。
+
+配置与环境变量:
+  FASTAPI_LITE_REDIS_STREAM_URL 必须显式设置。
+
+副作用与保护边界:
+  会在 Redis 中创建并删除测试专用 stream 和 consumer group。
+  不启动或停止 Redis 服务。
+
+常用示例:
+  FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
+EOF
+      ;;
     *)
       usage >&2
       return 2
@@ -201,6 +223,16 @@ case "$cmd" in
     uv run python scripts/verify/ensure_test_database.py
     uv run alembic upgrade head
     FASTAPI_LITE_POSTGRES_INTEGRATION=1 uv run pytest -m postgres_integration
+    ;;
+  redis-stream)
+    shift
+    if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
+    reject_extra_args "usage: ./scripts/verify.sh redis-stream" "$@"
+    cd "$ROOT_DIR"
+    if [ -z "${FASTAPI_LITE_REDIS_STREAM_URL:-}" ]; then
+      die "FASTAPI_LITE_REDIS_STREAM_URL is required" 2
+    fi
+    uv run pytest -m redis_stream_integration
     ;;
   migration-roundtrip)
     shift

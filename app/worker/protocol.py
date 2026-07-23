@@ -26,8 +26,8 @@ class QueueEnvelope(StrictBaseModel):
     queue_name: str = Field(min_length=1)
     input_schema_hash: HashString = Field(pattern=r"^jsonschema-jcs-v1:sha256:[0-9a-f]{64}$")
     output_schema_hash: HashString = Field(pattern=r"^jsonschema-jcs-v1:sha256:[0-9a-f]{64}$")
-    input: dict[str, Any] | None = None
-    input_ref: dict[str, Any] | None = None
+    input: Any | None = None
+    input_ref: Any | None = None
     trace_id: str = Field(min_length=1)
 
     @model_validator(mode="after")

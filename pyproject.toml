@@ -43,4 +43,5 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "postgres_integration: tests that require a migrated local PostgreSQL test database",
+    "redis_stream_integration: tests that require a local Redis Stream broker",
 ]

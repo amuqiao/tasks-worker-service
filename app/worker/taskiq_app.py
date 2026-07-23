@@ -14,6 +14,3 @@ def _build_broker():
 
 
 broker = _build_broker()
-
-
-from app.worker import taskiq_tasks as _taskiq_tasks  # noqa: E402,F401

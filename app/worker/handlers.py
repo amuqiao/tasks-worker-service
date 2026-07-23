@@ -38,19 +38,7 @@ class HandlerRegistry:
         return self._handlers.get((task_name, task_version))
 
 
-class ExampleTaskHandler:
-    async def handle(self, envelope: QueueEnvelope, context: WorkerContext) -> HandlerResult:
-        return HandlerResult(
-            output={
-                "ok": True,
-                "worker": context.worker_name,
-                "input": envelope.input,
-                "input_ref": envelope.input_ref,
-            }
-        )
-
-
 def build_default_registry() -> HandlerRegistry:
-    registry = HandlerRegistry()
-    registry.register("example.task", 1, ExampleTaskHandler())
-    return registry
+    from app.worker.registry import build_worker_registry
+
+    return build_worker_registry()
