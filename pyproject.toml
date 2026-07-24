@@ -13,9 +13,14 @@ dependencies = [
     "pydantic-settings==2.14.1",
     "python-dotenv==1.2.2",
     "httpx==0.28.1",
+    "numpy>=2.3.0",
+    "onnxruntime>=1.23.0",
+    "pyyaml>=6.0.2",
     "redis==6.4.0",
+    "soundfile>=0.13.0",
     "taskiq==0.12.4",
     "taskiq-redis==1.1.2",
+    "tritonclient[http]>=2.60.0",
 ]
 
 [project.optional-dependencies]
@@ -44,4 +49,5 @@ pythonpath = ["."]
 markers = [
     "postgres_integration: tests that require a migrated local PostgreSQL test database",
     "redis_stream_integration: tests that require a local Redis Stream broker",
+    "audio_cpu_integration: tests that require local audio stem models and sample data",
 ]

@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.config.env_manifest import ENV_KEY_MANIFEST
 from app.core.config.sections import (
+    AudioStemSettings,
+    AudioStemTritonSettings,
     DatabaseSettings,
     HttpClientSettings,
     ObservabilitySettings,
@@ -69,6 +71,8 @@ class AppSettings(BaseSettings):
     taskiq: TaskiqSettings = Field(default_factory=TaskiqSettings)
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
+    audio_stem: AudioStemSettings = Field(default_factory=AudioStemSettings)
+    audio_stem_triton: AudioStemTritonSettings = Field(default_factory=AudioStemTritonSettings)
     http_client: HttpClientSettings = Field(default_factory=HttpClientSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 

@@ -169,4 +169,6 @@ def test_default_manifest_declares_template_example_tasks() -> None:
         ("example.object_ref", 1),
         ("example.long_running", 1),
         ("example.failing", 1),
+        ("audio_stem_separation", 1),
+        ("audio_stem_separation_triton", 1),
     }

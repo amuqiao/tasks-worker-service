@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "worker_service": "worker-x",
   "queue_name": "job.example-task.v1",
-  "capabilities": ["cpu"],
+  "capabilities": ["cpu", "audio-stem", "local-storage"],
   "tasks": [
     {
       "task_name": "example.task",
@@ -112,6 +112,120 @@
       "retry_policy": {},
       "idempotency_retention_seconds": 86400,
       "required_worker_capabilities": ["cpu"],
+      "caller_bindings": [
+        {
+          "caller_service": "business-api-a",
+          "callback_url": null,
+          "compensation_window_seconds": 3600
+        }
+      ]
+    },
+    {
+      "task_name": "audio_stem_separation",
+      "task_version": 1,
+      "handler": "app.worker.task_modules.audio_stem_separation.handler:AudioStemSeparationHandler",
+      "input_schema": {
+        "type": "object",
+        "required": ["input_audio"],
+        "properties": {
+          "input_audio": {
+            "type": "object",
+            "required": ["scheme", "bucket", "region", "key", "content_type", "sha256", "size_bytes"],
+            "properties": {
+              "scheme": {"type": "string", "enum": ["local"]},
+              "bucket": {"type": "string", "minLength": 1},
+              "region": {"type": "string", "minLength": 1},
+              "key": {"type": "string", "minLength": 1},
+              "content_type": {"type": "string", "enum": ["audio/wav", "audio/x-wav"]},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "size_bytes": {"type": "integer", "minimum": 1},
+              "version_id": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          },
+          "model_service": {"type": "string", "enum": ["local"]},
+          "payload_schema_version": {"type": "string"},
+          "max_duration_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 3600}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["ok", "model_service", "stems", "sample_rate", "channels", "duration_seconds", "segment_count"],
+        "properties": {
+          "ok": {"type": "boolean"},
+          "model_service": {"type": "string", "enum": ["local"]},
+          "stems": {"type": "object"},
+          "sample_rate": {"type": "integer"},
+          "channels": {"type": "integer"},
+          "duration_seconds": {"type": "number"},
+          "segment_count": {"type": "integer"},
+          "execution_provider": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      },
+      "timeout_seconds": 2400,
+      "max_retries": 0,
+      "retry_policy": {},
+      "idempotency_retention_seconds": 86400,
+      "required_worker_capabilities": ["cpu", "audio-stem", "local-storage"],
+      "caller_bindings": [
+        {
+          "caller_service": "business-api-a",
+          "callback_url": null,
+          "compensation_window_seconds": 3600
+        }
+      ]
+    },
+    {
+      "task_name": "audio_stem_separation_triton",
+      "task_version": 1,
+      "handler": "app.worker.task_modules.audio_stem_separation_triton.handler:AudioStemSeparationTritonHandler",
+      "input_schema": {
+        "type": "object",
+        "required": ["input_audio"],
+        "properties": {
+          "input_audio": {
+            "type": "object",
+            "required": ["scheme", "bucket", "region", "key", "content_type", "sha256", "size_bytes"],
+            "properties": {
+              "scheme": {"type": "string", "enum": ["local"]},
+              "bucket": {"type": "string", "minLength": 1},
+              "region": {"type": "string", "minLength": 1},
+              "key": {"type": "string", "minLength": 1},
+              "content_type": {"type": "string", "enum": ["audio/wav", "audio/x-wav"]},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "size_bytes": {"type": "integer", "minimum": 1},
+              "version_id": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          },
+          "model_service": {"type": "string", "enum": ["triton"]},
+          "payload_schema_version": {"type": "string"},
+          "max_duration_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 3600}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["ok", "model_service", "stems", "sample_rate", "channels", "duration_seconds", "segment_count"],
+        "properties": {
+          "ok": {"type": "boolean"},
+          "model_service": {"type": "string", "enum": ["triton"]},
+          "stems": {"type": "object"},
+          "sample_rate": {"type": "integer"},
+          "channels": {"type": "integer"},
+          "duration_seconds": {"type": "number"},
+          "segment_count": {"type": "integer"},
+          "triton_model_version": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      },
+      "timeout_seconds": 2400,
+      "max_retries": 0,
+      "retry_policy": {},
+      "idempotency_retention_seconds": 86400,
+      "required_worker_capabilities": ["cpu", "audio-stem", "local-storage"],
       "caller_bindings": [
         {
           "caller_service": "business-api-a",

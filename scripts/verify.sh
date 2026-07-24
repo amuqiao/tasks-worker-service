@@ -27,6 +27,7 @@ Usage:
   tests       Run pytest
   postgres    Run gated PostgreSQL integration checks
   redis-stream Run gated Redis Stream broker integration checks
+  audio-cpu   Run gated local audio stem CPU integration checks
   job-platform-smoke Run optional cross-repo Job Platform smoke
   migration-roundtrip Run upgrade/downgrade/re-upgrade against a temporary local PostgreSQL database
   scripts     Check script entrypoints
@@ -49,6 +50,7 @@ Usage:
   ./scripts/verify.sh registry
   ./scripts/verify.sh postgres
   FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:26382/0 ./scripts/verify.sh redis-stream
+  ./scripts/verify.sh audio-cpu
   ./scripts/verify.sh job-platform-smoke
   ./scripts/verify.sh migration-roundtrip
 
@@ -161,6 +163,22 @@ Usage:
   FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:26382/0 ./scripts/verify.sh redis-stream
 EOF
       ;;
+    audio-cpu)
+      cat <<'EOF'
+Usage:
+  ./scripts/verify.sh audio-cpu
+
+职责:
+  使用本地 .data/misc WAV 样例运行 audio_stem_separation local CPU 文件链路集成测试。
+
+副作用与保护边界:
+  只写 pytest 临时目录，不启动服务，不连接远端 Triton。
+  不放入默认 check。
+
+常用示例:
+  ./scripts/verify.sh audio-cpu
+EOF
+      ;;
     job-platform-smoke)
       cat <<'EOF'
 Usage:
@@ -257,6 +275,13 @@ case "$cmd" in
       die "FASTAPI_LITE_REDIS_STREAM_URL is required" 2
     fi
     uv run python -m pytest -m redis_stream_integration
+    ;;
+  audio-cpu)
+    shift
+    if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
+    reject_extra_args "usage: ./scripts/verify.sh audio-cpu" "$@"
+    cd "$ROOT_DIR"
+    FASTAPI_LITE_AUDIO_CPU_INTEGRATION=1 uv run python -m pytest -m audio_cpu_integration
     ;;
   job-platform-smoke)
     shift

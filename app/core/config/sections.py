@@ -139,6 +139,57 @@ class StorageSettings(ConfigSection):
         return self
 
 
+class AudioStemSettings(ConfigSection):
+    model_dir: str = ".data/models/htdemucs-ft"
+    execution_provider: str = "CPUExecutionProvider"
+    input_bucket: str = "audio-inputs"
+    input_region: str = "local"
+    max_input_bytes: int = 200 * 1024 * 1024
+    output_prefix: str = "audio-stem-separation"
+    output_bucket: str = "audio-outputs"
+    output_region: str = "local"
+    max_duration_seconds: float = 3600
+
+    @field_validator("max_input_bytes")
+    @classmethod
+    def validate_max_input_bytes(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("AUDIO_STEM__MAX_INPUT_BYTES must be greater than 0")
+        return value
+
+    @field_validator("max_duration_seconds")
+    @classmethod
+    def validate_max_duration_seconds(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("AUDIO_STEM__MAX_DURATION_SECONDS must be greater than 0")
+        return value
+
+
+class AudioStemTritonSettings(ConfigSection):
+    url: str = "http://127.0.0.1:8000"
+    token: SecretStr = Field(default=SecretStr(""), repr=False)
+    model_version: str = "1"
+    request_timeout_seconds: float = 30
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("AUDIO_STEM_TRITON__URL must start with http:// or https://")
+        return value.rstrip("/")
+
+    @field_validator("request_timeout_seconds")
+    @classmethod
+    def validate_request_timeout_seconds(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("AUDIO_STEM_TRITON__REQUEST_TIMEOUT_SECONDS must be greater than 0")
+        return value
+
+    @property
+    def token_value(self) -> str:
+        return self.token.get_secret_value()
+
+
 class HttpClientSettings(ConfigSection):
     timeout_seconds: float = 5
 
