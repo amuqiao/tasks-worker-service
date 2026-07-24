@@ -15,7 +15,7 @@ compose_project_name() {
 
   env_file="$(env_file_path)"
   project_name="${COMPOSE_PROJECT_NAME:-$(env_value_from COMPOSE_PROJECT_NAME "$env_file")}"
-  project_name="${project_name:-fastapi-lite}"
+  project_name="${project_name:-tasks-worker-service}"
   printf "%s" "$project_name"
 }
 
@@ -74,6 +74,56 @@ host_port_listener_pids() {
     return 0
   fi
   die "lsof, ss, or netstat is required for host port preflight" 2
+}
+
+redis_url_host_port() {
+  local url="$1"
+  local authority
+  local host
+  local port
+
+  authority="${url#*://}"
+  authority="${authority%%/*}"
+  authority="${authority#*@}"
+  host="${authority%%:*}"
+  if [[ "$authority" == *:* ]]; then
+    port="${authority##*:}"
+  else
+    port="6379"
+  fi
+  [[ -n "$host" ]] || die "TASKIQ__REDIS_URL must include a host: $url" 2
+  validate_compose_host_port "TASKIQ__REDIS_URL port" "$port"
+  printf "%s %s" "$host" "$port"
+}
+
+assert_compose_worker_broker_reachable() {
+  local url
+  local host
+  local port
+  local owner_pids
+
+  url="$(compose_env_value_or_default TASKIQ__REDIS_URL redis://host.docker.internal:26380/0)"
+  read -r host port <<< "$(redis_url_host_port "$url")"
+
+  section "Job Broker"
+  case "$host" in
+    redis)
+      event "OK" "broker" "TASKIQ__REDIS_URL=$url uses compose redis service"
+      return 0
+      ;;
+    127.0.0.1|localhost|0.0.0.0|host.docker.internal)
+      owner_pids="$(host_port_listener_pids "$port")"
+      if [[ -z "$owner_pids" ]]; then
+        die "compose-worker requires Job Service Redis broker at TASKIQ__REDIS_URL=$url, but host port $port is not listening; start Job Service first or set TASKIQ__REDIS_URL" 4
+      fi
+      event "RUNNING" "broker" "TASKIQ__REDIS_URL=$url pid(s): $owner_pids"
+      return 0
+      ;;
+    *)
+      event "CHECK" "broker" "TASKIQ__REDIS_URL=$url remote host; host-port preflight skipped"
+      return 0
+      ;;
+  esac
 }
 
 compose_service_running() {

@@ -1,6 +1,6 @@
 # Scripts
 
-`scripts/` 是 `fastapi-lite` 的稳定本地操作入口。脚本遵循“入口合同清晰、输出可判定、高风险显式、错误快速暴露”的规则。
+`scripts/` 是 `tasks-worker-service` 的稳定本地操作入口。脚本遵循“入口合同清晰、输出可判定、高风险显式、错误快速暴露”的规则。
 
 ## Entrypoints
 
@@ -33,19 +33,42 @@
 - 写入、启动进程、迁移数据库等副作用必须在 help 中说明。
 - 脚本不读取隐藏配置源；默认配置文件是仓库根目录 `.env`，可用 `ENV_FILE` 覆盖。
 
+## Service Management Ways
+
+| Way | Commands | Scope |
+|---|---|---|
+| 日常入口 | `./scripts/deploy.sh up/status/down dev` | Docker PostgreSQL / Redis + 宿主机 API。`dev` 不自动启动 Worker。 |
+| 单进程入口 | `./scripts/dev.sh start/status/stop api|worker` | 只管理宿主机 API 或 Worker 进程，不启动或停止 Docker 依赖。 |
+| 运行模型入口 | `./scripts/deploy.sh up/status/down worker|dev-worker|compose-deps|compose-worker|compose-full` | 显式选择 Worker、依赖、Compose Worker 或全 Compose API 模型。 |
+
 ## Common Commands
 
 ```bash
 ./scripts/dev.sh doctor
-./scripts/dev.sh ports 8100 25432 26379
+./scripts/dev.sh ports 8130 25435 26382
 ./scripts/deploy.sh up dev
 ./scripts/deploy.sh status dev
 ./scripts/deploy.sh down dev
+./scripts/dev.sh start api
+./scripts/dev.sh status api
+./scripts/dev.sh stop api
+./scripts/dev.sh start worker
+./scripts/dev.sh status worker
+./scripts/dev.sh stop worker
+./scripts/deploy.sh up worker
+./scripts/deploy.sh status worker
+./scripts/deploy.sh down worker
 ./scripts/deploy.sh up dev-worker
+./scripts/deploy.sh status dev-worker
 ./scripts/deploy.sh down dev-worker
+./scripts/deploy.sh up compose-deps
+./scripts/deploy.sh status compose-deps
+./scripts/deploy.sh down compose-deps
 ./scripts/deploy.sh up compose-worker
+./scripts/deploy.sh status compose-worker
 ./scripts/deploy.sh down compose-worker
 ./scripts/deploy.sh up compose-full
+./scripts/deploy.sh status compose-full
 ./scripts/deploy.sh down all
 ./scripts/tools.sh secret
 ./scripts/verify.sh check

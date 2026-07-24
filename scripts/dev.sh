@@ -40,7 +40,7 @@ Usage:
 配置与环境变量:
   ENV_FILE     可选，读取 launcher 配置的 env 文件，默认 .env。
   API_HOST     可选，覆盖 API 监听 host，默认 127.0.0.1。
-  API_PORT     可选，覆盖 API 监听 port，默认 8100。
+  API_PORT     可选，覆盖 API 监听 port，默认 8130。
   TAIL_LINES   可选，logs 默认 tail 行数，默认 80。
 
 输出:
@@ -68,7 +68,7 @@ Usage:
 常用示例:
   ./scripts/dev.sh bootstrap
   ./scripts/dev.sh doctor
-  ./scripts/dev.sh ports 8100 25432 26379
+  ./scripts/dev.sh ports 8130 25435 26382
 
   # 常见本地开发：Docker 依赖 + 本地 API。
   ./scripts/deploy.sh up dev
@@ -185,7 +185,7 @@ EOF
       cat <<'EOF'
 Usage:
   ./scripts/dev.sh ports [port ...]
-  ./scripts/dev.sh ports --ports 8100,25432 --json
+  ./scripts/dev.sh ports --ports 8130,25435 --json
 
 职责:
   扫描本地 TCP 端口并推荐空闲端口。
@@ -200,7 +200,7 @@ Usage:
   只读端口检查，不启动或停止进程。
 
 常用示例:
-  ./scripts/dev.sh ports 8100 25432 26379
+  ./scripts/dev.sh ports 8130 25435 26382
   ./scripts/dev.sh ports --ports 8000-8010 --json
 
 Exit Codes:
@@ -341,7 +341,9 @@ start_api() {
 
 stop_api() {
   local pid
+  local stopped_port
   pid="$(api_pid)"
+  stopped_port="$(api_meta_port)"
   if [[ -n "$pid" ]] && pid_running "$pid" && ! api_pid_owned "$pid"; then
     rm -f "$API_PID_FILE" "$API_META_FILE"
     event "STALE" "api" "removed pid file for unowned pid=$pid"
@@ -349,7 +351,13 @@ stop_api() {
   fi
   if [[ -n "$pid" ]] && pid_running "$pid" && api_pid_owned "$pid"; then
     kill "$pid"
+    if ! wait_for_pid_exit "$pid" 10; then
+      die "api pid $pid did not exit after 10s" 4
+    fi
     rm -f "$API_PID_FILE" "$API_META_FILE"
+    if ! wait_for_port_free "$stopped_port" 10; then
+      die "api stopped but port $stopped_port is still used by pid=$(port_owner_pid "$stopped_port")" 4
+    fi
     event "STOPPED" "api" "pid=$pid"
     return 0
   fi
@@ -436,6 +444,9 @@ stop_worker() {
   fi
   if [[ -n "$pid" ]] && pid_running "$pid" && worker_pid_owned "$pid"; then
     kill "$pid"
+    if ! wait_for_pid_exit "$pid" 10; then
+      die "worker pid $pid did not exit after 10s" 4
+    fi
     rm -f "$WORKER_PID_FILE" "$WORKER_META_FILE"
     event "STOPPED" "worker" "pid=$pid"
     return 0

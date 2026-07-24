@@ -48,7 +48,7 @@ Usage:
   ./scripts/verify.sh check
   ./scripts/verify.sh registry
   ./scripts/verify.sh postgres
-  FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
+  FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:26382/0 ./scripts/verify.sh redis-stream
   ./scripts/verify.sh job-platform-smoke
   ./scripts/verify.sh migration-roundtrip
 
@@ -127,7 +127,7 @@ Usage:
   对专用 PostgreSQL _test 数据库运行迁移和 integration tests。
 
 配置与环境变量:
-  DATABASE__URL 可覆盖目标数据库；默认指向 fastapi_lite_test。
+  DATABASE__URL 可覆盖目标数据库；默认指向 tasks_worker_service_test。
 
 副作用与保护边界:
   会写入 DATABASE__URL 指向的数据库。
@@ -145,7 +145,7 @@ EOF
     redis-stream)
       cat <<'EOF'
 Usage:
-  FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
+  FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:26382/0 ./scripts/verify.sh redis-stream
 
 职责:
   对真实 Redis Stream broker 运行 Worker taskiq ack/no_ack 集成测试。
@@ -158,7 +158,7 @@ Usage:
   不启动或停止 Redis 服务。
 
 常用示例:
-  FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
+  FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:26382/0 ./scripts/verify.sh redis-stream
 EOF
       ;;
     job-platform-smoke)
@@ -243,7 +243,7 @@ case "$cmd" in
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
     reject_extra_args "usage: ./scripts/verify.sh postgres" "$@"
     cd "$ROOT_DIR"
-    export DATABASE__URL="${DATABASE__URL:-postgresql+asyncpg://postgres:postgres@127.0.0.1:25432/fastapi_lite_test}"
+    export DATABASE__URL="${DATABASE__URL:-postgresql+asyncpg://postgres:postgres@127.0.0.1:25435/tasks_worker_service_test}"
     uv run python scripts/verify/ensure_test_database.py
     uv run python -m alembic upgrade head
     FASTAPI_LITE_POSTGRES_INTEGRATION=1 uv run python -m pytest -m postgres_integration

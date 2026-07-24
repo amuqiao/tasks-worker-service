@@ -16,8 +16,8 @@ class RuntimeSettings(ConfigSection):
 
 
 class ServiceSettings(ConfigSection):
-    name: str = "fastapi-lite"
-    title: str = "FastAPI Lite"
+    name: str = "tasks-worker-service"
+    title: str = "Tasks Worker Service"
     api_prefix: str = "/v1"
 
     @field_validator("api_prefix")
@@ -48,7 +48,7 @@ class SecuritySettings(ConfigSection):
 
 
 class DatabaseSettings(ConfigSection):
-    url: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:25432/fastapi_lite"
+    url: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:25435/tasks_worker_service"
     ssl: bool = False
     pool_size: int = 5
     max_overflow: int = 10
@@ -70,12 +70,12 @@ class DatabaseSettings(ConfigSection):
 
 class RedisSettings(ConfigSection):
     enabled: bool = False
-    url: str = "redis://127.0.0.1:26379/0"
+    url: str = "redis://127.0.0.1:26382/0"
 
 
 class TaskiqSettings(ConfigSection):
     broker_kind: str = "redis_stream"
-    redis_url: str = "redis://127.0.0.1:26379/0"
+    redis_url: str = "redis://127.0.0.1:26380/0"
     task_name: str = "job-platform.consume_queue_envelope"
     queue_name: str = "job.example-task.v1"
 
@@ -91,7 +91,7 @@ class WorkerSettings(ConfigSection):
     service_name: str = "worker-x"
     worker_name: str = "worker-x-taskiq"
     worker_session_id: str = "worker-x-local"
-    job_service_base_url: str = "http://127.0.0.1:8100/internal/v1"
+    job_service_base_url: str = "http://127.0.0.1:8110/internal/v1"
     job_service_api_key: SecretStr = Field(default=SecretStr("dev-worker-key"), repr=False)
     job_service_registry_api_key: SecretStr = Field(default=SecretStr("dev-registry-key"), repr=False)
     manifest_path: str = "app/worker/manifest.json"

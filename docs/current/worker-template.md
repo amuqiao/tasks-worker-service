@@ -271,7 +271,7 @@ uv run python -m app.job_platform_worker.register_cli register
 注册需要：
 
 ```dotenv
-WORKER__JOB_SERVICE_BASE_URL=http://127.0.0.1:8100/internal/v1
+WORKER__JOB_SERVICE_BASE_URL=http://127.0.0.1:8110/internal/v1
 WORKER__SERVICE_NAME=worker-x
 WORKER__JOB_SERVICE_REGISTRY_API_KEY=dev-registry-key
 WORKER__MANIFEST_PATH=app/worker/manifest.json
@@ -292,9 +292,9 @@ python -m app.job_platform_worker.runner
 
 ```dotenv
 TASKIQ__BROKER_KIND=redis_stream
-TASKIQ__REDIS_URL=redis://127.0.0.1:6379/0
+TASKIQ__REDIS_URL=redis://127.0.0.1:26380/0
 TASKIQ__QUEUE_NAME=job.example-task.v1
-WORKER__JOB_SERVICE_BASE_URL=http://127.0.0.1:8100/internal/v1
+WORKER__JOB_SERVICE_BASE_URL=http://127.0.0.1:8110/internal/v1
 WORKER__SERVICE_NAME=worker-x
 WORKER__WORKER_NAME=worker-x-taskiq
 WORKER__WORKER_SESSION_ID=worker-x-local

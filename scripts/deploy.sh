@@ -42,8 +42,8 @@ Usage:
   up compose-deps       启动 PostgreSQL / Redis 本地依赖。
   down compose-deps     停止 PostgreSQL / Redis 本地依赖。
   status compose-deps   查看 PostgreSQL / Redis compose 状态。
-  up compose-worker     构建并启动 Worker / PostgreSQL / Redis。
-  down compose-worker   停止 Worker / PostgreSQL / Redis。
+  up compose-worker     构建并启动 Docker Worker 和本仓库 PostgreSQL / Redis；预检外部 Job Redis broker。
+  down compose-worker   停止 Docker Worker 和本仓库 PostgreSQL / Redis。
   status compose-worker 查看 compose-worker 状态。
   up compose-full       构建并启动 API / PostgreSQL / Redis。
   down compose-full     停止 API / PostgreSQL / Redis。
@@ -53,11 +53,11 @@ Usage:
 
 配置与环境变量:
   ENV_FILE              可选，指定 compose 使用的 env 文件，默认 .env。
-  COMPOSE_PROJECT_NAME  可选，覆盖 compose project 名，默认 fastapi-lite。
-  API_HOST_PORT         可选，compose-full API 暴露端口，默认 8100。
-  POSTGRES_HOST_PORT    可选，PostgreSQL 暴露端口，默认 25432。
-  REDIS_HOST_PORT       可选，Redis 暴露端口，默认 26379。
-  POSTGRES_DB           可选，PostgreSQL 数据库名，默认 fastapi_lite。
+  COMPOSE_PROJECT_NAME  可选，覆盖 compose project 名，默认 tasks-worker-service。
+  API_HOST_PORT         可选，compose-full API 暴露端口，默认 8130。
+  POSTGRES_HOST_PORT    可选，PostgreSQL 暴露端口，默认 25435。
+  REDIS_HOST_PORT       可选，Redis 暴露端口，默认 26382。
+  POSTGRES_DB           可选，PostgreSQL 数据库名，默认 tasks_worker_service。
 
 输出:
   stdout: check 结果、模式说明、compose 状态、启动/停止结果。
@@ -70,7 +70,7 @@ Usage:
   up/down local 只委托 dev.sh 管理本地 API 进程，不启动 compose 依赖。
   up/down worker 只委托 dev.sh 管理本地 Worker 进程，不启动 compose 依赖。
   up compose-deps 只启动 PostgreSQL / Redis，不启动 API。
-  up compose-worker 会构建并启动 Worker / PostgreSQL / Redis；会拒绝与本地 Worker 混跑。Worker 容器仍需要可达的 Job Service API，默认指向宿主机 http://host.docker.internal:8100/internal/v1。
+  up compose-worker 会构建并启动 Docker Worker 和本仓库 PostgreSQL / Redis；会拒绝与本地 Worker 混跑。Worker 容器仍需要可达的 Job Service API 和 Job Redis broker，默认分别指向宿主机 http://host.docker.internal:8110/internal/v1 与 redis://host.docker.internal:26380/0。
   up compose-full 会构建 API 镜像并启动 API / PostgreSQL / Redis；API 容器启动时默认执行 Alembic migration。
   compose-full 会拒绝与本地 API 混跑；local 会拒绝与 compose-full API 混跑。
   compose-worker 会拒绝与本地 Worker 混跑；worker 会拒绝与 compose-worker 混跑。
@@ -101,7 +101,7 @@ Usage:
   ./scripts/deploy.sh up compose-full
   ./scripts/deploy.sh status compose-full
 
-  # Worker/PostgreSQL/Redis 全部由 Compose 管理。
+  # Docker Worker + 本仓库 PostgreSQL/Redis；Job Service API/Redis broker 需要外部可达。
   ./scripts/deploy.sh up compose-worker
   ./scripts/deploy.sh status compose-worker
 
@@ -374,8 +374,8 @@ status_dev_worker() {
 up_deps() {
   require_env_file_for_compose
   assert_compose_host_ports_free "compose-deps" \
-    "POSTGRES_HOST_PORT:25432:postgres:5432/tcp" \
-    "REDIS_HOST_PORT:26379:redis:6379/tcp"
+    "POSTGRES_HOST_PORT:25435:postgres:5432/tcp" \
+    "REDIS_HOST_PORT:26382:redis:6379/tcp"
   assert_no_compose_project_name_conflict
   section "Compose Deps"
   compose up -d postgres redis
@@ -399,10 +399,11 @@ status_deps() {
 up_compose_worker() {
   require_env_file_for_compose
   assert_compose_host_ports_free "compose-worker" \
-    "POSTGRES_HOST_PORT:25432:postgres:5432/tcp" \
-    "REDIS_HOST_PORT:26379:redis:6379/tcp"
+    "POSTGRES_HOST_PORT:25435:postgres:5432/tcp" \
+    "REDIS_HOST_PORT:26382:redis:6379/tcp"
   assert_no_compose_project_name_conflict
   assert_no_local_worker_running_for_compose_worker
+  assert_compose_worker_broker_reachable
   section "Compose Worker"
   compose up -d postgres redis
   compose --profile worker up -d --build worker
@@ -432,7 +433,7 @@ status_compose_worker() {
 
 compose_api_host_url() {
   local port
-  port="$(compose_env_value_or_default API_HOST_PORT 8100)"
+  port="$(compose_env_value_or_default API_HOST_PORT 8130)"
   validate_compose_host_port API_HOST_PORT "$port"
   printf "http://127.0.0.1:%s" "$port"
 }
@@ -441,9 +442,9 @@ up_full() {
   local api_url
   require_env_file_for_compose
   assert_compose_host_ports_free "compose-full" \
-    "API_HOST_PORT:8100:api:8100/tcp" \
-    "POSTGRES_HOST_PORT:25432:postgres:5432/tcp" \
-    "REDIS_HOST_PORT:26379:redis:6379/tcp"
+    "API_HOST_PORT:8130:api:8100/tcp" \
+    "POSTGRES_HOST_PORT:25435:postgres:5432/tcp" \
+    "REDIS_HOST_PORT:26382:redis:6379/tcp"
   assert_no_compose_project_name_conflict
   assert_no_local_api_running_for_compose_full
   section "Compose Full"

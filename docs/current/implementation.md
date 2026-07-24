@@ -1,10 +1,10 @@
 # Current Implementation
 
-本文记录 `fastapi-lite` 当前已经实现并由测试覆盖的工程事实。它不描述未来计划；未实现内容见 [`../plans/drift-checklist.md`](../plans/drift-checklist.md)。
+本文记录 `tasks-worker-service` 当前已经实现并由测试覆盖的工程事实。它不描述未来计划；未实现内容见 [`../plans/drift-checklist.md`](../plans/drift-checklist.md)。
 
 ## Runtime Model
 
-`fastapi-lite` 当前按三层组织：
+`tasks-worker-service` 当前按三层组织：
 
 ```text
 foundation
@@ -147,7 +147,7 @@ Worker runtime 的运行入口、配置和 ack/no_ack broker 语义记录在 [`w
 - `./scripts/tools.sh secret`
 - `./scripts/tools.sh env-url`
 
-`dev.sh` 当前提供本地 API / Worker 进程管理、端口扫描、环境检查、迁移和测试快捷入口。`deploy.sh` 当前提供七种基础部署模型：`dev` 组合 `compose-deps + local`，`dev-worker` 组合 `compose-deps + local + worker`，`local` 委托 `dev.sh start|stop|status api`，`worker` 委托 `dev.sh start|stop|status worker`，`compose-deps` 管理 PostgreSQL / Redis，`compose-worker` 管理 Worker / PostgreSQL / Redis，`compose-full` 管理 API / PostgreSQL / Redis，并通过 `start-api.sh` 作为 API 容器入口；worker profile 使用 `start-worker.sh` 作为 Worker 容器入口。`verify.sh check` 当前覆盖 env、syntax、registry、alembic、scripts 和 pytest；`postgres` 与 `migration-roundtrip` 是显式 PostgreSQL gate，`redis-stream` 是显式 Redis Stream broker gate，`job-platform-smoke` 是显式跨仓 Job Service gate。`tools.sh` 当前提供无默认持久副作用的 secret 和 env URL 生成工具。
+`dev.sh` 当前提供本地 API / Worker 进程管理、端口扫描、环境检查、迁移和测试快捷入口。`deploy.sh` 当前提供七种基础部署模型：`dev` 组合 `compose-deps + local`，`dev-worker` 组合 `compose-deps + local + worker`，`local` 委托 `dev.sh start|stop|status api`，`worker` 委托 `dev.sh start|stop|status worker`，`compose-deps` 管理 PostgreSQL / Redis，`compose-worker` 管理 Docker Worker 和本仓库 PostgreSQL / Redis，并预检外部 Job Redis broker，`compose-full` 管理 API / PostgreSQL / Redis，并通过 `start-api.sh` 作为 API 容器入口；worker profile 使用 `start-worker.sh` 作为 Worker 容器入口。`verify.sh check` 当前覆盖 env、syntax、registry、alembic、scripts 和 pytest；`postgres` 与 `migration-roundtrip` 是显式 PostgreSQL gate，`redis-stream` 是显式 Redis Stream broker gate，`job-platform-smoke` 是显式跨仓 Job Service gate。`tools.sh` 当前提供无默认持久副作用的 secret 和 env URL 生成工具。
 
 ## Verification Baseline
 
@@ -163,7 +163,7 @@ PostgreSQL 集成测试和 migration roundtrip 是显式 gate：
 ```bash
 ./scripts/verify.sh postgres
 ./scripts/verify.sh migration-roundtrip
-FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
+FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:26382/0 ./scripts/verify.sh redis-stream
 ```
 
 跨仓 Job Service smoke 是显式 gate：

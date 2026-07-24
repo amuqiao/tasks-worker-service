@@ -1,7 +1,7 @@
 [project]
-name = "fastapi-lite"
+name = "tasks-worker-service"
 version = "0.2.0"
-description = "Reusable FastAPI service skeleton"
+description = "Tasks Worker Service for Job Platform"
 requires-python = ">=3.13"
 dependencies = [
     "alembic==1.18.4",

@@ -157,7 +157,7 @@ def test_verify_job_platform_smoke_help_does_not_execute_task():
 def test_verify_postgres_rejects_non_test_database_with_config_exit_code():
     result = run_script(
         "env",
-        "DATABASE__URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:25432/fastapi_lite",
+        "DATABASE__URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:25435/tasks_worker_service",
         "./scripts/verify.sh",
         "postgres",
     )
@@ -215,7 +215,7 @@ def test_k8s_check_config_uses_application_settings(tmp_path):
         env=script_env(
             tmp_path,
             KUBERNETES_SERVICE_HOST="10.96.0.1",
-            DATABASE__URL="postgresql+asyncpg://postgres:secret@postgres.default.svc:5432/fastapi_lite",
+            DATABASE__URL="postgresql+asyncpg://postgres:secret@postgres.default.svc:5432/tasks_worker_service",
             REDIS__URL="redis://redis.default.svc:6379/0",
             REDIS__ENABLED="true",
             STORAGE__BACKEND="disabled",
@@ -707,7 +707,7 @@ if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
 fi
 if [ "$1" = "ps" ]; then
   case "$*" in
-    *"com.docker.compose.service=worker"*) echo "tasks-worker-service-lite-worker-1"; exit 0 ;;
+    *"com.docker.compose.service=worker"*) echo "tasks-worker-service-worker-1"; exit 0 ;;
     *) exit 0 ;;
   esac
 fi
@@ -1162,37 +1162,42 @@ exit 1
 """
     )
     docker.chmod(0o755)
-    env = script_env(
-        tmp_path,
-        PATH=f"{bin_dir}:{os.environ['PATH']}",
-        POSTGRES_HOST_PORT=str(unused_port()),
-        REDIS_HOST_PORT=str(unused_port()),
-    )
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as broker:
+        broker.bind(("127.0.0.1", 0))
+        broker.listen(1)
+        broker_port = int(broker.getsockname()[1])
+        env = script_env(
+            tmp_path,
+            PATH=f"{bin_dir}:{os.environ['PATH']}",
+            POSTGRES_HOST_PORT=str(unused_port()),
+            REDIS_HOST_PORT=str(unused_port()),
+            TASKIQ__REDIS_URL=f"redis://127.0.0.1:{broker_port}/0",
+        )
 
-    up = subprocess.run(
-        ["./scripts/deploy.sh", "up", "compose-worker"],
-        cwd=ROOT_DIR,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
-    )
-    status = subprocess.run(
-        ["./scripts/deploy.sh", "status", "compose-worker"],
-        cwd=ROOT_DIR,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
-    )
-    down = subprocess.run(
-        ["./scripts/deploy.sh", "down", "compose-worker"],
-        cwd=ROOT_DIR,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
-    )
+        up = subprocess.run(
+            ["./scripts/deploy.sh", "up", "compose-worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+        status = subprocess.run(
+            ["./scripts/deploy.sh", "status", "compose-worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+        down = subprocess.run(
+            ["./scripts/deploy.sh", "down", "compose-worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
 
     assert up.returncode == 0, up.stdout + up.stderr
     assert "== Compose Worker ==" in up.stdout
@@ -1205,6 +1210,50 @@ exit 1
     assert any("--profile worker ps worker postgres redis" in call for call in calls)
     assert any("--profile worker stop worker" in call for call in calls)
     assert any("stop postgres redis" in call for call in calls)
+
+
+def test_deploy_compose_worker_rejects_missing_job_broker(tmp_path):
+    bin_dir = tmp_path / "bin"
+    log_file = tmp_path / "calls.log"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        f"""#!/usr/bin/env sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  echo "docker $@" >> "{log_file}"
+  exit 0
+fi
+exit 1
+"""
+    )
+    docker.chmod(0o755)
+    env = script_env(
+        tmp_path,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        POSTGRES_HOST_PORT=str(unused_port()),
+        REDIS_HOST_PORT=str(unused_port()),
+        TASKIQ__REDIS_URL=f"redis://127.0.0.1:{unused_port()}/0",
+    )
+
+    result = subprocess.run(
+        ["./scripts/deploy.sh", "up", "compose-worker"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 4
+    assert "Job Service Redis broker" in result.stderr
+    assert "not listening" in result.stderr
+    assert not log_file.exists()
 
 
 def test_deploy_compose_worker_rejects_unmanaged_local_worker(tmp_path):
@@ -1282,7 +1331,7 @@ if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
 fi
 if [ "$1" = "ps" ]; then
   case "$*" in
-    *"com.docker.compose.service=worker"*) echo "tasks-worker-service-lite-worker-1"; exit 0 ;;
+    *"com.docker.compose.service=worker"*) echo "tasks-worker-service-worker-1"; exit 0 ;;
     *) exit 0 ;;
   esac
 fi
@@ -1321,7 +1370,7 @@ if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
 fi
 if [ "$1" = "ps" ]; then
   case "$*" in
-    *"com.docker.compose.service=api"*) echo "tasks-worker-service-lite-api-1"; exit 0 ;;
+    *"com.docker.compose.service=api"*) echo "tasks-worker-service-api-1"; exit 0 ;;
     *) exit 0 ;;
   esac
 fi
@@ -1395,16 +1444,16 @@ if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
 fi
 if [ "$1" = "ps" ]; then
   case "$*" in
-    *"com.docker.compose.service=postgres"*) echo "fastapi-lite-postgres-1"; exit 0 ;;
-    *"com.docker.compose.service=redis"*) echo "fastapi-lite-redis-1"; exit 0 ;;
+    *"com.docker.compose.service=postgres"*) echo "tasks-worker-service-postgres-1"; exit 0 ;;
+    *"com.docker.compose.service=redis"*) echo "tasks-worker-service-redis-1"; exit 0 ;;
     *"com.docker.compose.project.working_dir"*) echo "{ROOT_DIR}"; exit 0 ;;
     *) exit 0 ;;
   esac
 fi
 if [ "$1" = "port" ]; then
   case "$2:$3" in
-    fastapi-lite-postgres-1:5432/tcp) echo "0.0.0.0:25432"; exit 0 ;;
-    fastapi-lite-redis-1:6379/tcp) echo "0.0.0.0:26379"; exit 0 ;;
+    tasks-worker-service-postgres-1:5432/tcp) echo "0.0.0.0:25435"; exit 0 ;;
+    tasks-worker-service-redis-1:6379/tcp) echo "0.0.0.0:26382"; exit 0 ;;
     *) exit 1 ;;
   esac
 fi
@@ -1426,14 +1475,14 @@ exit 1
         env=script_env(
             tmp_path,
             PATH=f"{bin_dir}:{os.environ['PATH']}",
-            POSTGRES_HOST_PORT="25432",
-            REDIS_HOST_PORT="26379",
+            POSTGRES_HOST_PORT="25435",
+            REDIS_HOST_PORT="26382",
         ),
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "RUNNING" in result.stdout
-    assert "fastapi-lite-postgres-1" in result.stdout
+    assert "tasks-worker-service-postgres-1" in result.stdout
     assert "== Compose Deps ==" in result.stdout
 
 
@@ -1457,7 +1506,7 @@ def test_tools_env_url_postgres_encodes_password():
             "--host",
             "127.0.0.1",
             "--port",
-            "25432",
+            "25435",
             "--database",
             "fastapi lite",
             "--password-stdin",
@@ -1470,13 +1519,13 @@ def test_tools_env_url_postgres_encodes_password():
     )
 
     assert result.returncode == 0
-    assert "DATABASE__URL=postgresql+asyncpg://user%20name:p%40ss%20word@127.0.0.1:25432/fastapi%20lite" in result.stdout
+    assert "DATABASE__URL=postgresql+asyncpg://user%20name:p%40ss%20word@127.0.0.1:25435/fastapi%20lite" in result.stdout
     assert "# password_present=true" in result.stdout
 
 
 def test_tools_env_url_redis_without_password():
-    result = run_script("./scripts/tools.sh", "env-url", "redis", "--host", "127.0.0.1", "--port", "26379", "--db", "0")
+    result = run_script("./scripts/tools.sh", "env-url", "redis", "--host", "127.0.0.1", "--port", "26382", "--db", "0")
 
     assert result.returncode == 0
-    assert "REDIS__URL=redis://127.0.0.1:26379/0" in result.stdout
+    assert "REDIS__URL=redis://127.0.0.1:26382/0" in result.stdout
     assert "# password_present=false" in result.stdout

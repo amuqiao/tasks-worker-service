@@ -1,6 +1,6 @@
 # Worker Runtime
 
-本文记录 `fastapi-lite` 当前 Worker runtime 的运行入口、配置和 broker ack 语义。业务 task 模板、幂等、input_ref/output_ref 和长任务写法见 [`worker-template.md`](worker-template.md)。
+本文记录 `tasks-worker-service` 当前 Worker runtime 的运行入口、配置和 broker ack 语义。业务 task 模板、幂等、input_ref/output_ref 和长任务写法见 [`worker-template.md`](worker-template.md)。
 
 ## Runtime Boundary
 
@@ -23,7 +23,7 @@ taskiq Redis Stream
 | `scripts/dev.sh start|stop|restart|status worker` | 宿主机本地 Worker 生命周期管理，使用 PID/meta/log 保护只操作当前仓库启动的 worker。 |
 | `scripts/deploy.sh up|down|status worker` | 委托 `dev.sh` 管理宿主机 Worker，不启动或停止 Docker 依赖。 |
 | `scripts/deploy.sh up|down|status dev-worker` | 显式本地 Worker 开发 recipe，组合 Docker PostgreSQL / Redis、本地 API 和本地 Worker。 |
-| `scripts/deploy.sh up|down|status compose-worker` | Docker Worker recipe，组合 Docker PostgreSQL / Redis 和 Docker Worker；Worker 容器仍需要可达的 Job Service API，默认调用宿主机 `http://host.docker.internal:8100/internal/v1`。 |
+| `scripts/deploy.sh up|down|status compose-worker` | Docker Worker recipe，组合本仓库 Docker PostgreSQL / Redis 和 Docker Worker；Worker 容器仍需要可达的 Job Service API 和 Job Redis broker，默认分别调用宿主机 `http://host.docker.internal:8110/internal/v1` 与 `redis://host.docker.internal:26380/0`。 |
 | `start-worker.sh` | Worker Pod/容器入口，执行 `python -m app.job_platform_worker.runner`。 |
 | `app.job_platform_worker.runner` | 直接监听 `RedisStreamBroker.listen()`，按 runtime 返回值显式调用或跳过 `message.ack()`。 |
 | `app.job_platform_worker.taskiq_app` | 创建 Redis Stream broker；不注册默认 `taskiq worker` 消费入口。 |
@@ -42,10 +42,10 @@ Worker 与 Job Service 对接时至少需要：
 
 ```dotenv
 TASKIQ__BROKER_KIND=redis_stream
-TASKIQ__REDIS_URL=redis://127.0.0.1:6379/0
+TASKIQ__REDIS_URL=redis://127.0.0.1:26380/0
 TASKIQ__QUEUE_NAME=job.example-task.v1
 TASKIQ__TASK_NAME=job-platform.consume_queue_envelope
-WORKER__JOB_SERVICE_BASE_URL=http://127.0.0.1:8100/internal/v1
+WORKER__JOB_SERVICE_BASE_URL=http://127.0.0.1:8110/internal/v1
 WORKER__SERVICE_NAME=example-worker
 WORKER__WORKER_NAME=example-worker-taskiq
 WORKER__WORKER_SESSION_ID=example-worker-local
@@ -126,7 +126,7 @@ uv run python -m app.job_platform_worker.register_cli register
 真实 Redis Stream broker gate 需要显式 Redis URL：
 
 ```bash
-FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:6379/0 ./scripts/verify.sh redis-stream
+FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:26382/0 ./scripts/verify.sh redis-stream
 ```
 
 该 gate 会创建并删除测试专用 stream 和 consumer group，不启动或停止 Redis。

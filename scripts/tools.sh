@@ -39,8 +39,8 @@ Usage:
 常用示例:
   ./scripts/tools.sh secret
   ./scripts/tools.sh secret --prefix dev_
-  printf '%s' 'raw-password' | ./scripts/tools.sh env-url postgres --username postgres --host 127.0.0.1 --port 25432 --database fastapi_lite --password-stdin
-  printf '%s' 'raw-password' | ./scripts/tools.sh env-url redis --host 127.0.0.1 --port 26379 --db 0 --password-stdin
+  printf '%s' 'raw-password' | ./scripts/tools.sh env-url postgres --username postgres --host 127.0.0.1 --port 25435 --database tasks_worker_service --password-stdin
+  printf '%s' 'raw-password' | ./scripts/tools.sh env-url redis --host 127.0.0.1 --port 26382 --db 0 --password-stdin
 
 Exit Codes:
   0  成功
@@ -80,8 +80,8 @@ Usage:
   摘要不输出原始密码，只显示 password_present。
 
 常用示例:
-  printf '%s' 'raw-password' | ./scripts/tools.sh env-url postgres --username postgres --host 127.0.0.1 --database fastapi_lite --password-stdin
-  ./scripts/tools.sh env-url redis --host 127.0.0.1 --port 26379 --db 0
+  printf '%s' 'raw-password' | ./scripts/tools.sh env-url postgres --username postgres --host 127.0.0.1 --port 25435 --database tasks_worker_service --password-stdin
+  ./scripts/tools.sh env-url redis --host 127.0.0.1 --port 26382 --db 0
 EOF
 }
 

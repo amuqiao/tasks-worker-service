@@ -9,12 +9,18 @@ from scripts.verify.env_config_check import check_env_file, check_example_alignm
 
 
 def test_settings_are_sectioned_and_load_defaults():
-    settings = AppSettings()
+    settings = AppSettings(_env_file=None)
 
     assert settings.runtime.app_env == "local"
+    assert settings.service.name == "tasks-worker-service"
+    assert settings.service.title == "Tasks Worker Service"
     assert settings.service.api_prefix == "/v1"
+    assert settings.database.url == "postgresql+asyncpg://postgres:postgres@127.0.0.1:25435/tasks_worker_service"
+    assert settings.redis.url == "redis://127.0.0.1:26382/0"
     assert settings.taskiq.broker_kind == "redis_stream"
+    assert settings.taskiq.redis_url == "redis://127.0.0.1:26380/0"
     assert settings.worker.service_name == "worker-x"
+    assert settings.worker.job_service_base_url == "http://127.0.0.1:8110/internal/v1"
     assert settings.storage.backend == "disabled"
 
 
@@ -54,7 +60,7 @@ def test_env_file_rejects_deprecated_and_derived_keys(tmp_path):
 
 
 def test_runtime_env_rejects_unknown_application_key(monkeypatch):
-    monkeypatch.setenv("DATABASE__URLL", "postgresql+asyncpg://postgres:postgres@127.0.0.1:25432/app")
+    monkeypatch.setenv("DATABASE__URLL", "postgresql+asyncpg://postgres:postgres@127.0.0.1:25435/app")
 
     with pytest.raises(ValueError, match="unknown application config key: DATABASE__URLL"):
         validate_app_env_key_drift()
@@ -62,6 +68,6 @@ def test_runtime_env_rejects_unknown_application_key(monkeypatch):
 
 def test_runtime_env_allows_launcher_keys(monkeypatch):
     monkeypatch.setenv("API_HOST", "127.0.0.1")
-    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "fastapi-lite-test")
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "tasks-worker-service-test")
 
     validate_app_env_key_drift()
