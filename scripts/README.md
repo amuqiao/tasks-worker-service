@@ -12,6 +12,7 @@
 | `k8s.sh` | K8s Pod 内运维：配置、PostgreSQL、应用健康、Alembic 状态和手动迁移检查。 |
 | `smoke-job-platform.sh` | 跨仓 smoke：当前 Worker 模板注册到本地 `tasks-platform`，提交 job，dispatch，并等待 worker complete。 |
 | `tools.sh` | 无默认持久副作用工具：secret 生成、DATABASE__URL / REDIS__URL 编码。 |
+| `worker.sh` | 只读 Worker 排障：状态、配置、manifest、日志和 doctor 汇总；不负责启停。 |
 
 ## Shared Helpers
 
@@ -31,7 +32,7 @@
 - 未知命令返回 exit code `2`。
 - 默认输出面向人读；机器读输出只在明确支持的命令中使用，例如 `dev.sh ports --json`。
 - 写入、启动进程、迁移数据库等副作用必须在 help 中说明。
-- 脚本不读取隐藏配置源；默认配置文件是仓库根目录 `.env`，可用 `ENV_FILE` 覆盖。
+- 脚本不读取隐藏配置源；Shell launcher helper 默认从仓库根目录 `.env` 读取，可用 `ENV_FILE` 覆盖。应用 settings 仍按 `app.core.config.settings` 的合同读取仓库根 `.env` 和显式环境变量。
 
 ## Service Management Ways
 
@@ -55,6 +56,8 @@
 ./scripts/dev.sh start worker
 ./scripts/dev.sh status worker
 ./scripts/dev.sh stop worker
+./scripts/worker.sh status
+./scripts/worker.sh doctor
 ./scripts/deploy.sh up worker
 ./scripts/deploy.sh status worker
 ./scripts/deploy.sh down worker

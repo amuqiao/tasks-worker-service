@@ -123,6 +123,7 @@ def test_script_help_commands_work():
         "./scripts/verify.sh",
         "./scripts/smoke-job-platform.sh",
         "./scripts/tools.sh",
+        "./scripts/worker.sh",
     ):
         result = run_script(script, "help")
         assert result.returncode == 0
@@ -142,6 +143,159 @@ def test_smoke_job_platform_unknown_command_fails():
 
     assert result.returncode == 2
     assert "unknown command" in result.stderr
+
+
+def test_worker_script_help_command_works():
+    result = run_script("./scripts/worker.sh", "help")
+
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "只读 worker 排障入口" in result.stdout
+    assert "overview" in result.stdout
+    assert "doctor" in result.stdout
+
+
+def test_worker_script_unknown_command_fails():
+    result = run_script("./scripts/worker.sh", "missing")
+
+    assert result.returncode == 2
+    assert "No such command 'missing'" in result.stderr
+
+
+def test_worker_status_json_reports_stopped_worker(tmp_path):
+    result = subprocess.run(
+        ["./scripts/worker.sh", "status", "--json"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    body = json.loads(result.stdout)
+    assert body["kind"] == "worker_status"
+    assert body["state"] == "stopped"
+    assert body["paths"]["pid_file"] == str(tmp_path / "run" / "worker.pid")
+    assert body["paths"]["log_file"] == str(tmp_path / "logs" / "worker.log")
+
+
+def test_worker_logs_json_is_read_only_when_log_is_missing(tmp_path):
+    log_file = tmp_path / "logs" / "worker.log"
+    result = subprocess.run(
+        ["./scripts/worker.sh", "logs", "--json", "--lines", "5"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    body = json.loads(result.stdout)
+    assert body["kind"] == "worker_logs"
+    assert body["file"]["exists"] is False
+    assert body["tail"] == []
+    assert not log_file.exists()
+
+
+def test_worker_config_json_redacts_url_passwords(tmp_path):
+    result = subprocess.run(
+        ["./scripts/worker.sh", "config", "--json"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(
+            tmp_path,
+            DATABASE__URL="postgresql+asyncpg://postgres:secret@127.0.0.1:25435/tasks_worker_service",
+            REDIS__URL="redis://:redis-secret@127.0.0.1:26382/0",
+            TASKIQ__REDIS_URL="redis://:broker-secret@127.0.0.1:26380/0",
+            WORKER__JOB_SERVICE_BASE_URL="https://user:job-secret@example.com/internal/v1",
+        ),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "secret" not in result.stdout
+    assert "redis-secret" not in result.stdout
+    assert "broker-secret" not in result.stdout
+    assert "job-secret" not in result.stdout
+    body = json.loads(result.stdout)
+    assert body["database"]["url"]["password_present"] is True
+    assert body["database"]["url"]["raw"] == "postgresql+asyncpg://postgres:***@127.0.0.1:25435/tasks_worker_service"
+    assert body["redis"]["url"]["raw"] == "redis://:***@127.0.0.1:26382/0"
+    assert body["taskiq"]["redis_url"]["raw"] == "redis://:***@127.0.0.1:26380/0"
+    assert body["worker"]["job_service_base_url"]["raw"] == "https://user:***@example.com/internal/v1"
+
+
+def test_worker_status_redacts_meta_urls(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "worker.pid").write_text("999999")
+    (run_dir / "worker.meta").write_text(
+        "\n".join(
+            [
+                "pid=999999",
+                f"root_dir={ROOT_DIR}",
+                "service=worker",
+                "TASKIQ__REDIS_URL=redis://:meta-secret@127.0.0.1:26380/0",
+                "WORKER__JOB_SERVICE_BASE_URL=https://user:base-secret@example.com/internal/v1",
+            ]
+        )
+    )
+
+    result = subprocess.run(
+        ["./scripts/worker.sh", "status", "--json"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "meta-secret" not in result.stdout
+    assert "base-secret" not in result.stdout
+    body = json.loads(result.stdout)
+    assert body["state"] == "stale_pid"
+    assert body["meta"]["TASKIQ__REDIS_URL"] == "redis://:***@127.0.0.1:26380/0"
+    assert body["meta"]["WORKER__JOB_SERVICE_BASE_URL"] == "https://user:***@example.com/internal/v1"
+
+
+def test_worker_config_distinguishes_launcher_and_app_env_files(tmp_path):
+    env_file = tmp_path / "custom.env"
+    env_file.write_text(
+        "\n".join(
+            [
+                f"RUN_DIR={tmp_path / 'custom-run'}",
+                f"LOG_DIR={tmp_path / 'custom-logs'}",
+                "TAIL_LINES=7",
+                "WORKER__SERVICE_NAME=from-launcher-env-file",
+            ]
+        )
+    )
+    env = {**os.environ, "ENV_FILE": str(env_file)}
+    env.pop("RUN_DIR", None)
+    env.pop("LOG_DIR", None)
+    env.pop("TAIL_LINES", None)
+
+    result = subprocess.run(
+        ["./scripts/worker.sh", "config", "--json"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    body = json.loads(result.stdout)
+    assert body["runtime"]["launcher_env_file"] == str(env_file)
+    assert body["runtime"]["app_env_file"] == str(ROOT_DIR / ".env")
+    assert body["runtime"]["run_dir"] == str(tmp_path / "custom-run")
+    assert body["runtime"]["log_dir"] == str(tmp_path / "custom-logs")
+    assert body["runtime"]["tail_lines"] == 7
+    assert body["worker"]["service_name"] != "from-launcher-env-file"
 
 
 def test_smoke_job_platform_script_does_not_depend_on_first_manifest_task():
