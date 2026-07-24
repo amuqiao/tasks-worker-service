@@ -18,6 +18,9 @@ API_OPENAPI_URL="${API_OPENAPI_URL:-${API_URL}/openapi.json}"
 API_PID_FILE="${API_PID_FILE:-$RUN_DIR/api.pid}"
 API_META_FILE="${API_META_FILE:-$RUN_DIR/api.meta}"
 API_LOG_FILE="${API_LOG_FILE:-$LOG_DIR/api.log}"
+WORKER_PID_FILE="${WORKER_PID_FILE:-$RUN_DIR/worker.pid}"
+WORKER_META_FILE="${WORKER_META_FILE:-$RUN_DIR/worker.meta}"
+WORKER_LOG_FILE="${WORKER_LOG_FILE:-$LOG_DIR/worker.log}"
 TAIL_LINES="${TAIL_LINES:-80}"
 
 bool_enabled() {
@@ -98,6 +101,10 @@ api_pid() {
   [[ -f "$API_PID_FILE" ]] && cat "$API_PID_FILE" 2>/dev/null || true
 }
 
+worker_pid() {
+  [[ -f "$WORKER_PID_FILE" ]] && cat "$WORKER_PID_FILE" 2>/dev/null || true
+}
+
 api_pid_owned() {
   local pid="$1"
   local command
@@ -120,10 +127,59 @@ api_pid_owned() {
   process_has_open_file "$pid" "$API_LOG_FILE"
 }
 
+worker_pid_owned() {
+  local pid="$1"
+  local command
+  local cwd
+  local expected_cwd
+  [[ -f "$WORKER_META_FILE" ]] || return 1
+  grep -Fx "pid=$pid" "$WORKER_META_FILE" >/dev/null 2>&1 || return 1
+  grep -Fx "root_dir=$ROOT_DIR" "$WORKER_META_FILE" >/dev/null 2>&1 || return 1
+  grep -Fx "service=worker" "$WORKER_META_FILE" >/dev/null 2>&1 || return 1
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  case "$command" in
+    *"app.job_platform_worker.runner"*)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  cwd="$(process_cwd "$pid")" || return 1
+  expected_cwd="$(canonical_dir "$ROOT_DIR")" || return 1
+  [[ "$cwd" == "$expected_cwd" ]] || return 1
+  process_has_open_file "$pid" "$WORKER_LOG_FILE"
+}
+
+worker_meta_config() {
+  local key
+  for key in \
+    TASKIQ__BROKER_KIND \
+    TASKIQ__REDIS_URL \
+    TASKIQ__TASK_NAME \
+    TASKIQ__QUEUE_NAME \
+    WORKER__SERVICE_NAME \
+    WORKER__WORKER_NAME \
+    WORKER__WORKER_SESSION_ID \
+    WORKER__JOB_SERVICE_BASE_URL \
+    WORKER__MANIFEST_PATH
+  do
+    printf "%s=%s\n" "$key" "${!key:-$(env_value "$key")}"
+  done
+}
+
 api_pid_matches_current_config() {
   local pid="$1"
   api_pid_owned "$pid" || return 1
   grep -Fx "url=$API_URL" "$API_META_FILE" >/dev/null 2>&1 || return 1
+}
+
+worker_pid_matches_current_config() {
+  local pid="$1"
+  local line
+  worker_pid_owned "$pid" || return 1
+  while IFS= read -r line; do
+    grep -Fx "$line" "$WORKER_META_FILE" >/dev/null 2>&1 || return 1
+  done <<< "$(worker_meta_config)"
 }
 
 pid_running() {
@@ -135,6 +191,39 @@ api_running() {
   local pid
   pid="$(api_pid)"
   pid_running "$pid" && api_pid_matches_current_config "$pid"
+}
+
+worker_running() {
+  local pid
+  pid="$(worker_pid)"
+  pid_running "$pid" && worker_pid_matches_current_config "$pid"
+}
+
+worker_process_alive() {
+  local pid
+  pid="$(worker_pid)"
+  pid_running "$pid" && worker_pid_owned "$pid"
+}
+
+repo_worker_process_pids() {
+  local pid
+  local command
+  local cwd
+  local expected_cwd
+  expected_cwd="$(canonical_dir "$ROOT_DIR")" || return 1
+  ps -axo pid=,command= 2>/dev/null | while read -r pid command; do
+    [[ -n "${pid:-}" ]] || continue
+    case "$command" in
+      *"app.job_platform_worker.runner"*)
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    cwd="$(process_cwd "$pid" 2>/dev/null || true)"
+    [[ "$cwd" == "$expected_cwd" ]] || continue
+    printf "%s\n" "$pid"
+  done
 }
 
 port_owner_pid() {

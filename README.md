@@ -81,7 +81,9 @@ Run the API, PostgreSQL, and Redis in Compose:
 Run the Job Platform worker on the host:
 
 ```bash
-./start-worker.sh
+./scripts/dev.sh start worker
+./scripts/dev.sh status worker
+./scripts/dev.sh stop worker
 ```
 
 Check the Worker template and optional Job Service smoke entry:

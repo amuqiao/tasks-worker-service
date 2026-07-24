@@ -286,6 +286,7 @@ case "$cmd" in
     bash -n scripts/tools.sh
     bash -n scripts/lib/compose.sh
     bash -n scripts/lib/modes.sh
+    bash -n scripts/lib/runtime.sh
     ./scripts/dev.sh help >/dev/null
     ./scripts/dev.sh doctor >/dev/null
     ./scripts/dev.sh ports 1 --json --allow-busy >/dev/null

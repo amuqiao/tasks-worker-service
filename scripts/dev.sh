@@ -13,10 +13,10 @@ Usage:
   ./scripts/dev.sh -h|--help
 
 职责:
-  本地开发入口。管理当前仓库的 FastAPI API 进程、开发依赖检查、迁移、端口扫描和测试快捷命令。
+  本地开发入口。管理当前仓库的 FastAPI API / Worker 进程、开发依赖检查、迁移、端口扫描和测试快捷命令。
 
 不负责:
-  不管理 Docker/Compose PostgreSQL、Redis、生产部署、远端资源、真实 Redis/S3 adapter、业务 worker 或跨仓库服务。
+  不管理 Docker/Compose PostgreSQL、Redis、生产部署、远端资源、真实 Redis/S3 adapter 或跨仓库服务。
   Docker 依赖和 compose-full 生命周期请使用 ./scripts/deploy.sh。
 
 运行环境:
@@ -27,11 +27,11 @@ Usage:
   bootstrap        缺少 .env 时从 .env.example 创建，并执行 uv sync --all-groups。
   doctor           检查常用本地开发前置条件、配置文件、端口和脚本入口。
   run              前台运行 FastAPI API，启用 uvicorn --reload。
-  start api        后台启动 FastAPI API。
-  stop [api]       停止后台 API；省略 api 时等价于 stop api。
-  restart [api]    重启后台 API；省略 api 时等价于 restart api。
-  status           展示本地 API 进程、端口、URL、配置文件和日志路径。
-  logs             tail API 日志。
+  start <api|worker>      后台启动 FastAPI API 或 Worker。
+  stop [api|worker|all]   停止后台进程；省略目标时等价于 stop api。
+  restart [api|worker]    重启后台进程；省略目标时等价于 restart api。
+  status [api|worker|all] 展示本地进程、端口、URL、配置文件和日志路径。
+  logs [api|worker]       tail API 或 Worker 日志；省略目标时等价于 logs api。
   migrate          对当前 DATABASE__URL 执行 Alembic upgrade head。
   ports [ports...] 扫描本地端口；支持 --ports、端口范围、--json。
   test             运行 pytest。
@@ -48,14 +48,16 @@ Usage:
   stderr: 非法命令、缺少依赖、端口占用、配置或迁移失败详情。
 
 运行产物:
-  PID:  ${API_PID_FILE}
-  日志: ${API_LOG_FILE}
+  API PID:    ${API_PID_FILE}
+  API 日志:   ${API_LOG_FILE}
+  Worker PID: ${WORKER_PID_FILE}
+  Worker 日志:${WORKER_LOG_FILE}
 
 副作用与保护边界:
   bootstrap 会创建 .env 并同步依赖。
   start/restart 会启动本地后台进程，并拒绝占用中的 API_PORT。
-  stop 会停止本脚本 PID 文件记录的 API 进程。
-  start/stop/restart/status 只管理本地 API，不启动或停止 Docker PostgreSQL/Redis。
+  stop 会停止本脚本 PID 文件记录且属于当前仓库的进程。
+  start/stop/restart/status 只管理本地 API/Worker，不启动或停止 Docker PostgreSQL/Redis。
   migrate 会写入 DATABASE__URL 指向的数据库，执行前会拒绝明显非本地 URL。
   doctor/status/ports 不修改服务状态。
 
@@ -75,6 +77,7 @@ Usage:
 
   # 精确控制：只操作本地 API 或 Docker 依赖。
   ./scripts/dev.sh restart api
+  ./scripts/dev.sh restart worker
   ./scripts/dev.sh stop api
   ./scripts/deploy.sh status compose-deps
 
@@ -126,25 +129,28 @@ Usage:
 EOF
       ;;
     start|stop|restart)
-      local usage_target="api"
-      if [[ "$name" == "stop" || "$name" == "restart" ]]; then
-        usage_target="[api]"
+      local usage_target="<api|worker>"
+      if [[ "$name" == "stop" ]]; then
+        usage_target="[api|worker|all]"
+      elif [[ "$name" == "restart" ]]; then
+        usage_target="[api|worker]"
       fi
       cat <<EOF
 Usage:
   ./scripts/dev.sh ${name} ${usage_target}
 
 职责:
-  执行本地 API 生命周期子命令 ${name}。查看顶层 help 获取完整配置、输出和退出码合同。
+  执行本地 API 或 Worker 生命周期子命令 ${name}。查看顶层 help 获取完整配置、输出和退出码合同。
 
 副作用与保护边界:
   start/restart 会启动本地后台进程，并拒绝占用中的 API_PORT。
-  stop 只会停止本脚本启动且 PID/metadata 匹配的 API 进程。
+  stop 只会停止本脚本启动且 PID/metadata 匹配的 API 或 Worker 进程。
   ${name} 不启动或停止 Docker PostgreSQL/Redis；依赖容器请使用 ./scripts/deploy.sh。
-  PID 文件陈旧或 PID 不属于当前仓库 uvicorn 时，不会 kill 该进程。
+  PID 文件陈旧或 PID 不属于当前仓库目标进程时，不会 kill 该进程。
 
 常用示例:
   ./scripts/dev.sh ${name} api
+  ./scripts/dev.sh ${name} worker
 
 Exit Codes:
   0  成功
@@ -163,7 +169,7 @@ Usage:
 副作用与保护边界:
   run 会前台启动 uvicorn。
   migrate 会写入 DATABASE__URL 指向的数据库，并拒绝非本地主机。
-  status/logs/test 按各自工具语义执行，不启动后台 API。
+  status/logs/test 按各自工具语义执行，不启动后台进程。
 
 常用示例:
   ./scripts/dev.sh ${name}
@@ -378,10 +384,89 @@ status_api() {
   fi
 }
 
+start_worker() {
+  local python_bin
+  local pid
+  local existing_pid
+  local unmanaged_pids
+  if worker_running; then
+    event "RUNNING" "worker" "pid=$(worker_pid) log=$WORKER_LOG_FILE"
+    return 0
+  fi
+  require_uv
+  require_process_identity_check
+  existing_pid="$(worker_pid)"
+  if [[ -n "$existing_pid" ]]; then
+    stop_worker
+  fi
+  unmanaged_pids="$(repo_worker_process_pids | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+  if [[ -n "$unmanaged_pids" ]]; then
+    die "worker process already exists for this repo but is not managed by $WORKER_PID_FILE: pid(s) $unmanaged_pids; stop it before ./scripts/dev.sh start worker" 4
+  fi
+  ensure_runtime_dirs
+  cd "$ROOT_DIR"
+  uv run python -m app.job_platform_worker.register_cli validate
+  python_bin="$(uv run python -c 'import sys; print(sys.executable)')"
+  pid="$(uv run python scripts/dev/start_detached.py --cwd "$ROOT_DIR" --stdout "$WORKER_LOG_FILE" -- "$python_bin" -m app.job_platform_worker.runner)"
+  echo "$pid" > "$WORKER_PID_FILE"
+  {
+    printf "pid=%s\n" "$pid"
+    printf "root_dir=%s\n" "$ROOT_DIR"
+    printf "service=worker\n"
+    worker_meta_config
+  } > "$WORKER_META_FILE"
+  sleep 1
+  if ! worker_running; then
+    tail -n 60 "$WORKER_LOG_FILE" >&2 2>/dev/null || true
+    rm -f "$WORKER_PID_FILE"
+    rm -f "$WORKER_META_FILE"
+    die "worker failed to stay running; inspect: ./scripts/dev.sh logs worker" 4
+  fi
+  event "STARTED" "worker" "pid=$(worker_pid) log=$WORKER_LOG_FILE"
+}
+
+stop_worker() {
+  local pid
+  pid="$(worker_pid)"
+  if [[ -n "$pid" ]] && pid_running "$pid" && ! worker_pid_owned "$pid"; then
+    rm -f "$WORKER_PID_FILE" "$WORKER_META_FILE"
+    event "STALE" "worker" "removed pid file for unowned pid=$pid"
+    return 0
+  fi
+  if [[ -n "$pid" ]] && pid_running "$pid" && worker_pid_owned "$pid"; then
+    kill "$pid"
+    rm -f "$WORKER_PID_FILE" "$WORKER_META_FILE"
+    event "STOPPED" "worker" "pid=$pid"
+    return 0
+  fi
+  rm -f "$WORKER_PID_FILE"
+  rm -f "$WORKER_META_FILE"
+  event "STOPPED" "worker" "not running"
+}
+
+status_worker() {
+  section "Worker"
+  row "scope" "local-only" "Docker deps: ./scripts/deploy.sh status compose-deps"
+  if worker_running; then
+    row "process" "running" "pid=$(worker_pid)"
+  else
+    row "process" "stopped" "-"
+  fi
+  row "entrypoint" "configured" "python -m app.job_platform_worker.runner"
+  row "pid_file" "path" "$WORKER_PID_FILE"
+  row "log_file" "path" "$WORKER_LOG_FILE"
+}
+
 logs_api() {
   ensure_runtime_dirs
   touch "$API_LOG_FILE"
   tail -n "$TAIL_LINES" "$API_LOG_FILE"
+}
+
+logs_worker() {
+  ensure_runtime_dirs
+  touch "$WORKER_LOG_FILE"
+  tail -n "$TAIL_LINES" "$WORKER_LOG_FILE"
 }
 
 migrate() {
@@ -428,37 +513,74 @@ case "$cmd" in
   start)
     shift
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
-    [[ "${1:-}" == "api" ]] || die "usage: ./scripts/dev.sh start api" 2
-    shift
-    reject_extra_args "usage: ./scripts/dev.sh start api" "$@"
-    start_api
+    target="${1:-}"
+    case "$target" in
+      api) shift; reject_extra_args "usage: ./scripts/dev.sh start api" "$@"; start_api ;;
+      worker) shift; reject_extra_args "usage: ./scripts/dev.sh start worker" "$@"; start_worker ;;
+      *) die "usage: ./scripts/dev.sh start <api|worker>" 2 ;;
+    esac
     ;;
   stop)
     shift
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
-    if [[ "${1:-}" == "api" ]]; then shift; fi
-    reject_extra_args "usage: ./scripts/dev.sh stop [api]" "$@"
-    stop_api
+    target="${1:-api}"
+    case "$target" in
+      api) [[ $# -gt 0 ]] && shift; reject_extra_args "usage: ./scripts/dev.sh stop [api|worker|all]" "$@"; stop_api ;;
+      worker) shift; reject_extra_args "usage: ./scripts/dev.sh stop [api|worker|all]" "$@"; stop_worker ;;
+      all)
+        shift
+        reject_extra_args "usage: ./scripts/dev.sh stop [api|worker|all]" "$@"
+        stop_worker
+        stop_api
+        ;;
+      *) die "usage: ./scripts/dev.sh stop [api|worker|all]" 2 ;;
+    esac
     ;;
   restart)
     shift
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
-    if [[ "${1:-}" == "api" ]]; then shift; fi
-    reject_extra_args "usage: ./scripts/dev.sh restart [api]" "$@"
-    stop_api
-    start_api
+    target="${1:-api}"
+    case "$target" in
+      api)
+        [[ $# -gt 0 ]] && shift
+        reject_extra_args "usage: ./scripts/dev.sh restart [api|worker]" "$@"
+        stop_api
+        start_api
+        ;;
+      worker)
+        shift
+        reject_extra_args "usage: ./scripts/dev.sh restart [api|worker]" "$@"
+        stop_worker
+        start_worker
+        ;;
+      *) die "usage: ./scripts/dev.sh restart [api|worker]" 2 ;;
+    esac
     ;;
   status)
     shift
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
-    reject_extra_args "usage: ./scripts/dev.sh status" "$@"
-    status_api
+    target="${1:-api}"
+    case "$target" in
+      api) [[ $# -gt 0 ]] && shift; reject_extra_args "usage: ./scripts/dev.sh status [api|worker|all]" "$@"; status_api ;;
+      worker) shift; reject_extra_args "usage: ./scripts/dev.sh status [api|worker|all]" "$@"; status_worker ;;
+      all)
+        shift
+        reject_extra_args "usage: ./scripts/dev.sh status [api|worker|all]" "$@"
+        status_api
+        status_worker
+        ;;
+      *) die "usage: ./scripts/dev.sh status [api|worker|all]" 2 ;;
+    esac
     ;;
   logs)
     shift
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
-    reject_extra_args "usage: ./scripts/dev.sh logs" "$@"
-    logs_api
+    target="${1:-api}"
+    case "$target" in
+      api) [[ $# -gt 0 ]] && shift; reject_extra_args "usage: ./scripts/dev.sh logs [api|worker]" "$@"; logs_api ;;
+      worker) shift; reject_extra_args "usage: ./scripts/dev.sh logs [api|worker]" "$@"; logs_worker ;;
+      *) die "usage: ./scripts/dev.sh logs [api|worker]" 2 ;;
+    esac
     ;;
   migrate)
     shift

@@ -78,6 +78,12 @@ assert_no_compose_full_api_running_for_deps_down() {
   die "compose-full api is running: $api_name. Stop compose-full before stopping deps with: ./scripts/deploy.sh down compose-full" 4
 }
 
+assert_no_local_worker_running_for_deps_down() {
+  if worker_process_alive; then
+    die "local worker is running: pid=$(worker_pid). Stop it before stopping deps with: ./scripts/deploy.sh down worker or ./scripts/deploy.sh down dev-worker" 4
+  fi
+}
+
 assert_no_local_api_running_for_compose_full() {
   if api_running; then
     die "local api is running: pid=$(api_pid). Stop it before compose-full with: ./scripts/dev.sh stop api" 4

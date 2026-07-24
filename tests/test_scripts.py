@@ -39,6 +39,45 @@ def wait_for_tcp_port(port: int, timeout: float = 5.0) -> None:
     raise AssertionError(f"port did not open: {port}")
 
 
+def write_fake_worker_uv(tmp_path: Path) -> Path:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake_python = bin_dir / "fake-worker-python"
+    fake_python.write_text(
+        """#!/usr/bin/env sh
+if [ "$1" = "-m" ] && [ "$2" = "app.job_platform_worker.runner" ]; then
+  while :; do sleep 1; done
+fi
+exit 2
+"""
+    )
+    fake_python.chmod(0o755)
+
+    uv = bin_dir / "uv"
+    uv.write_text(
+        """#!/usr/bin/env sh
+if [ "$1" = "--version" ]; then
+  echo "uv 0.0.0-test"
+  exit 0
+fi
+if [ "$1" = "run" ] && [ "$2" = "python" ] && [ "$3" = "-m" ] && [ "$4" = "app.job_platform_worker.register_cli" ]; then
+  exit 0
+fi
+if [ "$1" = "run" ] && [ "$2" = "python" ] && [ "$3" = "-c" ]; then
+  echo "$FAKE_WORKER_PYTHON"
+  exit 0
+fi
+if [ "$1" = "run" ] && [ "$2" = "python" ]; then
+  shift 2
+  exec "$REAL_PYTHON" "$@"
+fi
+exit 2
+"""
+    )
+    uv.chmod(0o755)
+    return bin_dir
+
+
 def script_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
     env = os.environ.copy()
     env.update(
@@ -91,7 +130,7 @@ def test_smoke_job_platform_script_does_not_depend_on_first_manifest_task():
 
 
 def test_script_unexpected_argument_fails():
-    result = run_script("./scripts/dev.sh", "status", "extra")
+    result = run_script("./scripts/dev.sh", "status", "api", "extra")
 
     assert result.returncode == 2
     assert "unexpected argument" in result.stderr
@@ -324,7 +363,7 @@ def test_stop_without_target_defaults_to_api(tmp_path):
 
 def test_stop_and_restart_reject_unknown_target(tmp_path):
     stop = subprocess.run(
-        ["./scripts/dev.sh", "stop", "worker"],
+        ["./scripts/dev.sh", "stop", "database"],
         cwd=ROOT_DIR,
         text=True,
         capture_output=True,
@@ -332,7 +371,7 @@ def test_stop_and_restart_reject_unknown_target(tmp_path):
         env=script_env(tmp_path),
     )
     restart = subprocess.run(
-        ["./scripts/dev.sh", "restart", "worker"],
+        ["./scripts/dev.sh", "restart", "database"],
         cwd=ROOT_DIR,
         text=True,
         capture_output=True,
@@ -341,11 +380,321 @@ def test_stop_and_restart_reject_unknown_target(tmp_path):
     )
 
     assert stop.returncode == 2
-    assert "unexpected argument" in stop.stderr
-    assert "stop [api]" in stop.stderr
+    assert "stop [api|worker|all]" in stop.stderr
     assert restart.returncode == 2
-    assert "unexpected argument" in restart.stderr
-    assert "restart [api]" in restart.stderr
+    assert "restart [api|worker]" in restart.stderr
+
+
+def test_start_status_logs_stop_worker_lifecycle(tmp_path):
+    if not shutil.which("lsof"):
+        pytest.skip("lsof is required by dev.sh worker ownership checks")
+    bin_dir = write_fake_worker_uv(tmp_path)
+    env = script_env(
+        tmp_path,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        REAL_PYTHON=sys.executable,
+        FAKE_WORKER_PYTHON=str(bin_dir / "fake-worker-python"),
+    )
+
+    try:
+        start = subprocess.run(
+            ["./scripts/dev.sh", "start", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+        assert start.returncode == 0, start.stdout + start.stderr
+        assert "STARTED" in start.stdout
+        worker_pid = (tmp_path / "run" / "worker.pid").read_text().strip()
+        worker_meta = (tmp_path / "run" / "worker.meta").read_text()
+        assert f"pid={worker_pid}" in worker_meta
+        assert "service=worker" in worker_meta
+        assert (tmp_path / "logs" / "worker.log").exists()
+
+        status = subprocess.run(
+            ["./scripts/dev.sh", "status", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+        assert status.returncode == 0
+        assert "== Worker ==" in status.stdout
+        assert "running" in status.stdout
+
+        logs = subprocess.run(
+            ["./scripts/dev.sh", "logs", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+        assert logs.returncode == 0
+    finally:
+        subprocess.run(
+            ["./scripts/dev.sh", "stop", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+
+
+def test_start_worker_restarts_owned_process_when_worker_config_changes(tmp_path):
+    if not shutil.which("lsof"):
+        pytest.skip("lsof is required by dev.sh worker ownership checks")
+    bin_dir = write_fake_worker_uv(tmp_path)
+    first_env = script_env(
+        tmp_path,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        REAL_PYTHON=sys.executable,
+        FAKE_WORKER_PYTHON=str(bin_dir / "fake-worker-python"),
+        TASKIQ__QUEUE_NAME="job.first.v1",
+    )
+    second_env = {
+        **first_env,
+        "TASKIQ__QUEUE_NAME": "job.second.v1",
+    }
+    old_pid = ""
+
+    try:
+        first = subprocess.run(
+            ["./scripts/dev.sh", "start", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=first_env,
+        )
+        assert first.returncode == 0, first.stdout + first.stderr
+        old_pid = (tmp_path / "run" / "worker.pid").read_text().strip()
+        assert "TASKIQ__QUEUE_NAME=job.first.v1" in (tmp_path / "run" / "worker.meta").read_text()
+
+        second = subprocess.run(
+            ["./scripts/dev.sh", "start", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=second_env,
+        )
+        assert second.returncode == 0, second.stdout + second.stderr
+        assert "STOPPED" in second.stdout
+        assert "STARTED" in second.stdout
+        new_pid = (tmp_path / "run" / "worker.pid").read_text().strip()
+        assert new_pid != old_pid
+        assert "TASKIQ__QUEUE_NAME=job.second.v1" in (tmp_path / "run" / "worker.meta").read_text()
+        assert subprocess.run(["ps", "-p", old_pid], check=False, capture_output=True).returncode != 0
+    finally:
+        subprocess.run(
+            ["./scripts/dev.sh", "stop", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=second_env,
+        )
+        if old_pid:
+            subprocess.run(["kill", old_pid], check=False, capture_output=True)
+
+
+def test_deploy_down_compose_deps_rejects_running_worker_even_when_config_changes(tmp_path):
+    if not shutil.which("lsof"):
+        pytest.skip("lsof is required by dev.sh worker ownership checks")
+    bin_dir = write_fake_worker_uv(tmp_path)
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  echo "unexpected compose stop" >&2
+  exit 0
+fi
+exit 1
+"""
+    )
+    docker.chmod(0o755)
+    first_env = script_env(
+        tmp_path,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        REAL_PYTHON=sys.executable,
+        FAKE_WORKER_PYTHON=str(bin_dir / "fake-worker-python"),
+        TASKIQ__QUEUE_NAME="job.first.v1",
+    )
+    second_env = {
+        **first_env,
+        "TASKIQ__QUEUE_NAME": "job.second.v1",
+    }
+
+    try:
+        start = subprocess.run(
+            ["./scripts/dev.sh", "start", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=first_env,
+        )
+        assert start.returncode == 0, start.stdout + start.stderr
+
+        result = subprocess.run(
+            ["./scripts/deploy.sh", "down", "compose-deps"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=second_env,
+        )
+
+        assert result.returncode == 4
+        assert "local worker is running" in result.stderr
+        assert "unexpected compose stop" not in result.stderr
+    finally:
+        subprocess.run(
+            ["./scripts/dev.sh", "stop", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=first_env,
+        )
+
+
+def test_deploy_down_dev_stops_api_before_worker_blocks_deps(tmp_path):
+    if not shutil.which("lsof"):
+        pytest.skip("lsof is required by dev.sh worker ownership checks")
+    bin_dir = write_fake_worker_uv(tmp_path)
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  echo "unexpected compose stop" >&2
+  exit 0
+fi
+exit 1
+"""
+    )
+    docker.chmod(0o755)
+    env = script_env(
+        tmp_path,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        REAL_PYTHON=sys.executable,
+        FAKE_WORKER_PYTHON=str(bin_dir / "fake-worker-python"),
+    )
+
+    try:
+        start = subprocess.run(
+            ["./scripts/dev.sh", "start", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+        assert start.returncode == 0, start.stdout + start.stderr
+
+        result = subprocess.run(
+            ["./scripts/deploy.sh", "down", "dev"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+
+        assert result.returncode == 4
+        assert "RUN       local" in result.stdout
+        assert "STOPPED   api" in result.stdout
+        assert "local worker is running" in result.stderr
+        assert "unexpected compose stop" not in result.stderr
+    finally:
+        subprocess.run(
+            ["./scripts/dev.sh", "stop", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+
+
+def test_stale_worker_pid_file_does_not_kill_unowned_process(tmp_path):
+    sleeper = subprocess.Popen(["sleep", "5"])
+    try:
+        run_dir = tmp_path / "run"
+        log_dir = tmp_path / "logs"
+        run_dir.mkdir()
+        log_dir.mkdir()
+        (run_dir / "worker.pid").write_text(str(sleeper.pid))
+
+        result = subprocess.run(
+            ["./scripts/dev.sh", "stop", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env={"RUN_DIR": str(run_dir), "LOG_DIR": str(log_dir), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"},
+        )
+
+        assert result.returncode == 0
+        assert "STALE" in result.stdout
+        assert sleeper.poll() is None
+    finally:
+        sleeper.terminate()
+        sleeper.wait(timeout=5)
+
+
+def test_start_worker_rejects_unmanaged_repo_worker_process(tmp_path):
+    if not shutil.which("lsof"):
+        pytest.skip("lsof is required by dev.sh worker ownership checks")
+    bin_dir = write_fake_worker_uv(tmp_path)
+    env = script_env(
+        tmp_path,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        REAL_PYTHON=sys.executable,
+        FAKE_WORKER_PYTHON=str(bin_dir / "fake-worker-python"),
+    )
+    unmanaged = subprocess.Popen(
+        [str(bin_dir / "fake-worker-python"), "-m", "app.job_platform_worker.runner"],
+        cwd=ROOT_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.2)
+
+        result = subprocess.run(
+            ["./scripts/dev.sh", "start", "worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+
+        assert result.returncode == 4
+        assert "worker process already exists" in result.stderr
+        assert str(unmanaged.pid) in result.stderr
+        assert unmanaged.poll() is None
+    finally:
+        unmanaged.terminate()
+        unmanaged.wait(timeout=5)
 
 
 def test_stale_pid_with_matching_command_but_wrong_cwd_is_not_killed(tmp_path):
@@ -663,7 +1012,7 @@ def test_deploy_down_without_mode_requires_explicit_target(tmp_path):
     )
 
     assert result.returncode == 2
-    assert "usage: ./scripts/deploy.sh down <dev|local|compose-deps|compose-full|all>" in result.stderr
+    assert "usage: ./scripts/deploy.sh down <dev|dev-worker|local|worker|compose-deps|compose-full|all>" in result.stderr
     assert result.stdout == ""
 
 
@@ -707,7 +1056,7 @@ exit 1
     assert "STOPPED" in result.stdout
     calls = log_file.read_text().splitlines()
     assert len(calls) == 1
-    assert "--profile app stop api postgres redis" in calls[0]
+    assert "--profile app --profile worker stop api worker postgres redis" in calls[0]
 
 
 def test_deploy_down_all_fails_when_compose_is_unavailable_after_local_stop(tmp_path):

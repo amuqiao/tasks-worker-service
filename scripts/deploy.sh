@@ -14,7 +14,7 @@ Usage:
   ./scripts/deploy.sh -h|--help
 
 职责:
-  部署模型入口。提供 dev、local、compose-deps、compose-full 四种运行模型；down all 为显式全量停止目标。
+  部署模型入口。提供 dev、dev-worker、local、worker、compose-deps、compose-full 六种运行模型；down all 为显式全量停止目标。
 
 不负责:
   不管理 K8s、远端服务器、云资源、生产数据库、真实 Redis/S3 adapter 或跨仓库编排。
@@ -29,10 +29,16 @@ Usage:
   up dev                启动常用本地开发环境：Docker PostgreSQL / Redis + 宿主机 API。
   down dev              停止常用本地开发环境：宿主机 API + Docker PostgreSQL / Redis。
   status dev            查看常用本地开发环境：本地 API + Docker PostgreSQL / Redis。
+  up dev-worker         启动本地开发 Worker 环境：Docker PostgreSQL / Redis + 宿主机 API + 宿主机 Worker。
+  down dev-worker       停止本地开发 Worker 环境：宿主机 Worker + 宿主机 API + Docker PostgreSQL / Redis。
+  status dev-worker     查看本地开发 Worker 环境：本地 API / Worker + Docker PostgreSQL / Redis。
   up local              委托 ./scripts/dev.sh start api。
+  up worker             委托 ./scripts/dev.sh start worker。
   down <mode>           停止指定模型；mode 必须显式指定，避免误停服务。
   down local            委托 ./scripts/dev.sh stop api。
+  down worker           委托 ./scripts/dev.sh stop worker。
   status local          委托 ./scripts/dev.sh status。
+  status worker         委托 ./scripts/dev.sh status worker。
   up compose-deps       启动 PostgreSQL / Redis 本地依赖。
   down compose-deps     停止 PostgreSQL / Redis 本地依赖。
   status compose-deps   查看 PostgreSQL / Redis compose 状态。
@@ -57,13 +63,15 @@ Usage:
 副作用与保护边界:
   check 只做静态文件和 compose 配置检查；如果 Docker 可用，会检查 project 名冲突。
   up/down/status dev 是常用本地开发 recipe，组合执行 compose-deps 与 local。
+  up/down/status dev-worker 是显式 Worker 开发 recipe，组合执行 compose-deps、local 与 worker。
   up/down local 只委托 dev.sh 管理本地 API 进程，不启动 compose 依赖。
+  up/down worker 只委托 dev.sh 管理本地 Worker 进程，不启动 compose 依赖。
   up compose-deps 只启动 PostgreSQL / Redis，不启动 API。
   up compose-full 会构建 API 镜像并启动 API / PostgreSQL / Redis；API 容器启动时默认执行 Alembic migration。
   compose-full 会拒绝与本地 API 混跑；local 会拒绝与 compose-full API 混跑。
-  worker profile 可用于构建 Worker Pod 形态，默认 deploy mode 不自动启动 worker。
+  worker profile 可用于构建 Worker Pod 形态；只有 worker/dev-worker 显式 mode 会启动宿主机 Worker。
   down 使用 compose stop，不删除 volume；down/status 也会检查 compose project working_dir，避免误操作其他工作树。
-  down 必须显式指定 mode；down all 会先停 local API，再一次性停止本仓库 compose api/postgres/redis。
+  down 必须显式指定 mode；down all 会先停 local API/Worker，再一次性停止本仓库 compose api/worker/postgres/redis。
 
 成功标准:
   check 成功 = 必需部署文件存在、脚本语法正确、compose 配置可解析或 Docker 未安装时静态检查通过。
@@ -119,20 +127,24 @@ EOF
     up|status)
       cat <<EOF
 Usage:
-  ./scripts/deploy.sh ${name} <dev|local|compose-deps|compose-full>
+  ./scripts/deploy.sh ${name} <dev|dev-worker|local|worker|compose-deps|compose-full>
 
 职责:
   对指定部署模型执行 ${name}。
 
 副作用与保护边界:
   dev 是常用本地开发 recipe，组合执行 compose-deps 与 local。
+  dev-worker 是显式 Worker 开发 recipe，组合执行 compose-deps、local 与 worker。
   local 委托 ./scripts/dev.sh。
+  worker 委托 ./scripts/dev.sh 管理宿主机 Worker。
   compose-deps 只管理 PostgreSQL / Redis。
   compose-full 管理 API / PostgreSQL / Redis，并与 local API 互斥。
 
 常用示例:
   ./scripts/deploy.sh ${name} dev
+  ./scripts/deploy.sh ${name} dev-worker
   ./scripts/deploy.sh ${name} local
+  ./scripts/deploy.sh ${name} worker
   ./scripts/deploy.sh ${name} compose-deps
   ./scripts/deploy.sh ${name} compose-full
 EOF
@@ -140,21 +152,25 @@ EOF
     down)
       cat <<'EOF'
 Usage:
-  ./scripts/deploy.sh down <dev|local|compose-deps|compose-full|all>
+  ./scripts/deploy.sh down <dev|dev-worker|local|worker|compose-deps|compose-full|all>
 
 职责:
   停止指定部署模型；必须显式传入 mode。
 
 副作用与保护边界:
   dev 会先停止 local API，再停止 compose-deps。
+  dev-worker 会先停止 local Worker，再停止 local API，最后停止 compose-deps。
   local 委托 ./scripts/dev.sh stop api。
+  worker 委托 ./scripts/dev.sh stop worker。
   compose-full 管理 API / PostgreSQL / Redis。
   compose-deps 只管理 PostgreSQL / Redis。
-  all 会先停止 local API，再一次性停止本仓库 compose api/postgres/redis。
+  all 会先停止 local API/Worker，再一次性停止本仓库 compose api/worker/postgres/redis。
 
 常用示例:
   ./scripts/deploy.sh down dev
+  ./scripts/deploy.sh down dev-worker
   ./scripts/deploy.sh down local
+  ./scripts/deploy.sh down worker
   ./scripts/deploy.sh down compose-deps
   ./scripts/deploy.sh down compose-full
   ./scripts/deploy.sh down all
@@ -176,10 +192,12 @@ require_env_file_for_compose() {
 show_modes() {
   section "Deployment Modes"
   event "MODE" "dev" "常用本地开发：compose-deps + 本地 API；适合日常复制粘贴"
+  event "MODE" "dev-worker" "显式 Worker 开发：compose-deps + 本地 API + 本地 Worker"
   event "MODE" "local" "本地 API 进程；由 ./scripts/dev.sh 管理，适合快速开发"
+  event "MODE" "worker" "本地 Worker 进程；由 ./scripts/dev.sh 管理，需显式启动"
   event "MODE" "compose-deps" "只启动 postgres/redis；适合给本地 API 提供依赖"
   event "MODE" "compose-full" "API/postgres/redis 全部由 compose 管理；API 容器启动时执行 migration"
-  event "TARGET" "all" "仅用于 down；显式停止 local API 和本仓库 compose api/postgres/redis"
+  event "TARGET" "all" "仅用于 down；显式停止 local API/Worker 和本仓库 compose api/worker/postgres/redis"
 }
 
 check_compose_config_if_available() {
@@ -250,25 +268,39 @@ up_local() {
   "$ROOT_DIR/scripts/dev.sh" start api
 }
 
+up_worker() {
+  "$ROOT_DIR/scripts/dev.sh" start worker
+}
+
 down_local() {
   "$ROOT_DIR/scripts/dev.sh" stop api
 }
 
+down_worker() {
+  "$ROOT_DIR/scripts/dev.sh" stop worker
+}
+
 down_all() {
   section "Deploy Down All"
+  event "RUN" "worker" "down"
+  down_worker
   event "RUN" "local" "down"
   down_local
   if ! compose_available; then
     die "Docker Compose is not available; compose modes were not stopped" 2
   fi
   assert_no_compose_project_name_conflict
-  event "RUN" "compose" "down api/postgres/redis"
+  event "RUN" "compose" "down api/worker/postgres/redis"
   section "Compose All"
-  compose --profile app stop api postgres redis
+  compose --profile app --profile worker stop api worker postgres redis
 }
 
 status_local() {
   "$ROOT_DIR/scripts/dev.sh" status
+}
+
+status_worker() {
+  "$ROOT_DIR/scripts/dev.sh" status worker
 }
 
 up_dev() {
@@ -279,8 +311,28 @@ up_dev() {
   up_local
 }
 
+up_dev_worker() {
+  section "Deploy Dev Worker"
+  event "RUN" "compose-deps" "up"
+  up_deps
+  event "RUN" "local" "up"
+  up_local
+  event "RUN" "worker" "up"
+  up_worker
+}
+
 down_dev() {
   section "Deploy Dev"
+  event "RUN" "local" "down"
+  down_local
+  event "RUN" "compose-deps" "down"
+  down_deps
+}
+
+down_dev_worker() {
+  section "Deploy Dev Worker"
+  event "RUN" "worker" "down"
+  down_worker
   event "RUN" "local" "down"
   down_local
   event "RUN" "compose-deps" "down"
@@ -291,6 +343,16 @@ status_dev() {
   section "Deploy Dev"
   event "CHECK" "local" "status"
   status_local
+  event "CHECK" "compose-deps" "status"
+  status_deps
+}
+
+status_dev_worker() {
+  section "Deploy Dev Worker"
+  event "CHECK" "local" "status"
+  status_local
+  event "CHECK" "worker" "status"
+  status_worker
   event "CHECK" "compose-deps" "status"
   status_deps
 }
@@ -308,6 +370,7 @@ up_deps() {
 down_deps() {
   assert_no_compose_project_name_conflict
   assert_no_compose_full_api_running_for_deps_down
+  assert_no_local_worker_running_for_deps_down
   section "Compose Deps"
   compose stop postgres redis
 }
@@ -391,9 +454,9 @@ case "$cmd" in
     if args_include_help "$@"; then command_usage "$action"; exit $?; fi
     mode="${1:-}"
     if [[ "$action" == "down" ]]; then
-      [[ -n "$mode" ]] || die "usage: ./scripts/deploy.sh down <dev|local|compose-deps|compose-full|all>" 2
+      [[ -n "$mode" ]] || die "usage: ./scripts/deploy.sh down <dev|dev-worker|local|worker|compose-deps|compose-full|all>" 2
     else
-      [[ -n "$mode" ]] || die "usage: ./scripts/deploy.sh $action <dev|local|compose-deps|compose-full>" 2
+      [[ -n "$mode" ]] || die "usage: ./scripts/deploy.sh $action <dev|dev-worker|local|worker|compose-deps|compose-full>" 2
     fi
     shift
     reject_extra_args "usage: ./scripts/deploy.sh $action $mode" "$@"
@@ -401,9 +464,15 @@ case "$cmd" in
       up:dev) up_dev ;;
       down:dev) down_dev ;;
       status:dev) status_dev ;;
+      up:dev-worker) up_dev_worker ;;
+      down:dev-worker) down_dev_worker ;;
+      status:dev-worker) status_dev_worker ;;
       up:local) up_local ;;
       down:local) down_local ;;
       status:local) status_local ;;
+      up:worker) up_worker ;;
+      down:worker) down_worker ;;
+      status:worker) status_worker ;;
       up:compose-deps) up_deps ;;
       down:compose-deps) down_deps ;;
       status:compose-deps) status_deps ;;

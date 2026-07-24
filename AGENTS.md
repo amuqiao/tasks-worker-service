@@ -7,15 +7,21 @@
 - 只在用户明确要求时提交；非明确要求下不做 `amend`，不改写历史。
 
 # 本地服务启停规则
-- `scripts/dev.sh` 只管理宿主机本地 FastAPI API 进程。
+- `scripts/dev.sh` 只管理宿主机本地 FastAPI API / Worker 进程。
   - 启动 API：`./scripts/dev.sh start api`
   - 停止 API：`./scripts/dev.sh stop api`
   - 重启 API：`./scripts/dev.sh restart api`
-  - 查看 API：`./scripts/dev.sh status`
+  - 查看 API：`./scripts/dev.sh status api` 或 `./scripts/dev.sh status`
+  - 启动 Worker：`./scripts/dev.sh start worker`
+  - 停止 Worker：`./scripts/dev.sh stop worker`
+  - 重启 Worker：`./scripts/dev.sh restart worker`
+  - 查看 Worker：`./scripts/dev.sh status worker`
 - `scripts/deploy.sh` 管理运行模型和 Docker/Compose 服务。
   - 常用本地开发环境：`./scripts/deploy.sh up dev`
   - 查看常用本地开发环境：`./scripts/deploy.sh status dev`
   - 停止常用本地开发环境：`./scripts/deploy.sh down dev`
+  - 显式 Worker 开发环境：`./scripts/deploy.sh up|status|down dev-worker`
+  - 仅宿主机 Worker：`./scripts/deploy.sh up|status|down worker`
   - 仅 Docker 依赖：`./scripts/deploy.sh up|status|down compose-deps`
   - 全 Docker API/依赖：`./scripts/deploy.sh up|status|down compose-full`
   - 全量停止必须显式使用：`./scripts/deploy.sh down all`

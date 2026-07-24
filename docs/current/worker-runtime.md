@@ -20,6 +20,9 @@ taskiq Redis Stream
 
 | 入口 | 当前职责 |
 |---|---|
+| `scripts/dev.sh start|stop|restart|status worker` | 宿主机本地 Worker 生命周期管理，使用 PID/meta/log 保护只操作当前仓库启动的 worker。 |
+| `scripts/deploy.sh up|down|status worker` | 委托 `dev.sh` 管理宿主机 Worker，不启动或停止 Docker 依赖。 |
+| `scripts/deploy.sh up|down|status dev-worker` | 显式本地 Worker 开发 recipe，组合 Docker PostgreSQL / Redis、本地 API 和本地 Worker。 |
 | `start-worker.sh` | Worker Pod/容器入口，执行 `python -m app.job_platform_worker.runner`。 |
 | `app.job_platform_worker.runner` | 直接监听 `RedisStreamBroker.listen()`，按 runtime 返回值显式调用或跳过 `message.ack()`。 |
 | `app.job_platform_worker.taskiq_app` | 创建 Redis Stream broker；不注册默认 `taskiq worker` 消费入口。 |
