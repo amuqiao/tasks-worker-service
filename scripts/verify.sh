@@ -306,6 +306,7 @@ case "$cmd" in
     bash -n scripts/deploy.sh
     bash -n scripts/k8s.sh
     bash -n scripts/verify.sh
+    bash -n scripts/real-flow.sh
     bash -n scripts/smoke-job-platform.sh
     bash -n start-worker.sh
     bash -n scripts/tools.sh
@@ -319,6 +320,7 @@ case "$cmd" in
     ./scripts/deploy.sh modes >/dev/null
     ./scripts/k8s.sh help >/dev/null
     ./scripts/verify.sh help >/dev/null
+    ./scripts/real-flow.sh help >/dev/null
     ./scripts/smoke-job-platform.sh help >/dev/null
     ./scripts/tools.sh help >/dev/null
     ./scripts/tools.sh secret --prefix test_ >/dev/null

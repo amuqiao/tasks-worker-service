@@ -121,6 +121,7 @@ def test_script_help_commands_work():
         "./scripts/deploy.sh",
         "./scripts/k8s.sh",
         "./scripts/verify.sh",
+        "./scripts/real-flow.sh",
         "./scripts/smoke-job-platform.sh",
         "./scripts/tools.sh",
         "./scripts/worker.sh",
@@ -143,6 +144,31 @@ def test_smoke_job_platform_unknown_command_fails():
 
     assert result.returncode == 2
     assert "unknown command" in result.stderr
+
+
+def test_real_flow_unknown_command_fails():
+    result = run_script("./scripts/real-flow.sh", "missing")
+
+    assert result.returncode == 2
+    assert "unknown command" in result.stderr
+
+
+def test_real_flow_forces_tunnel_for_infer_and_smoke():
+    body = (ROOT_DIR / "scripts" / "real-flow.sh").read_text(encoding="utf-8")
+
+    assert 'TRITON_URL="$(triton_local_base_url)"' in body
+    assert 'AUDIO_STEM_TRITON__URL="$(triton_local_base_url)"' in body
+    assert "BatchMode=yes" in body
+    assert "ExitOnForwardFailure=yes" in body
+    assert "--connect-timeout" in body
+    assert 'require_file "$(env_file_path)"' in body
+
+
+def test_verify_scripts_checks_real_flow_script():
+    body = (ROOT_DIR / "scripts" / "verify.sh").read_text(encoding="utf-8")
+
+    assert "bash -n scripts/real-flow.sh" in body
+    assert "./scripts/real-flow.sh help >/dev/null" in body
 
 
 def test_worker_script_help_command_works():
