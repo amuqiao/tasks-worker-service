@@ -14,24 +14,21 @@ Usage:
   ./scripts/deploy.sh -h|--help
 
 职责:
-  部署模型入口。提供 dev、dev-worker、local、worker、compose-deps、compose-worker、compose-full 七种运行模型；down all 为显式全量停止目标。
+  部署模型入口。提供 dev、local、worker、compose-deps、compose-full 五种运行模型；down all 为显式全量停止目标。
 
 不负责:
   不管理 K8s、远端服务器、云资源、生产数据库、真实 Redis/S3 adapter 或跨仓库编排。
 
 运行环境:
   Requires: Bash.
-  Dependencies: Docker / Docker Compose for compose-deps, compose-worker and compose-full.
+  Dependencies: Docker / Docker Compose for compose-deps and compose-full.
 
 命令:
   modes                 展示运行模型和特殊目标。
   check                 校验部署文件、compose 配置、入口脚本和 project 名冲突。
-  up dev                启动常用本地开发环境：Docker PostgreSQL / Redis + 宿主机 API。
-  down dev              停止常用本地开发环境：宿主机 API + Docker PostgreSQL / Redis。
-  status dev            查看常用本地开发环境：本地 API + Docker PostgreSQL / Redis。
-  up dev-worker         启动本地开发 Worker 环境：Docker PostgreSQL / Redis + 宿主机 API + 宿主机 Worker。
-  down dev-worker       停止本地开发 Worker 环境：宿主机 Worker + 宿主机 API + Docker PostgreSQL / Redis。
-  status dev-worker     查看本地开发 Worker 环境：本地 API / Worker + Docker PostgreSQL / Redis。
+  up dev                启动常用本地开发环境：Docker PostgreSQL / Redis + 宿主机 API + 宿主机 Worker。
+  down dev              停止常用本地开发环境：宿主机 Worker + 宿主机 API + Docker PostgreSQL / Redis。
+  status dev            查看常用本地开发环境：本地 API / Worker + Docker PostgreSQL / Redis。
   up local              委托 ./scripts/dev.sh start api。
   up worker             委托 ./scripts/dev.sh start worker。
   down <mode>           停止指定模型；mode 必须显式指定，避免误停服务。
@@ -42,11 +39,8 @@ Usage:
   up compose-deps       启动 PostgreSQL / Redis 本地依赖。
   down compose-deps     停止 PostgreSQL / Redis 本地依赖。
   status compose-deps   查看 PostgreSQL / Redis compose 状态。
-  up compose-worker     构建并启动 Docker Worker 和本仓库 PostgreSQL / Redis；预检外部 Job Redis broker。
-  down compose-worker   停止 Docker Worker 和本仓库 PostgreSQL / Redis。
-  status compose-worker 查看 compose-worker 状态。
-  up compose-full       构建并启动 API / PostgreSQL / Redis。
-  down compose-full     停止 API / PostgreSQL / Redis。
+  up compose-full       构建并启动 Docker API / Worker / PostgreSQL / Redis；预检外部 Job Redis broker。
+  down compose-full     停止 Docker API / Worker / PostgreSQL / Redis。
   status compose-full   查看 compose-full 状态。
   down all              全量停止 local API 和本仓库 compose 服务。
   help                  显示帮助。
@@ -65,45 +59,39 @@ Usage:
 
 副作用与保护边界:
   check 只做静态文件和 compose 配置检查；如果 Docker 可用，会检查 project 名冲突。
-  up/down/status dev 是常用本地开发 recipe，组合执行 compose-deps 与 local。
-  up/down/status dev-worker 是显式 Worker 开发 recipe，组合执行 compose-deps、local 与 worker。
+  up/down/status dev 是常用本地开发 recipe，组合执行 compose-deps、local 与 worker。
   up/down local 只委托 dev.sh 管理本地 API 进程，不启动 compose 依赖。
   up/down worker 只委托 dev.sh 管理本地 Worker 进程，不启动 compose 依赖。
   up compose-deps 只启动 PostgreSQL / Redis，不启动 API。
-  up compose-worker 会构建并启动 Docker Worker 和本仓库 PostgreSQL / Redis；会拒绝与本地 Worker 混跑。Worker 容器仍需要可达的 Job Service API 和 Job Redis broker，默认分别指向宿主机 http://host.docker.internal:8110/internal/v1 与 redis://host.docker.internal:26380/0。
-  up compose-full 会构建 API 镜像并启动 API / PostgreSQL / Redis；API 容器启动时默认执行 Alembic migration。
+  up compose-full 会构建并启动 Docker API / Worker / PostgreSQL / Redis；Worker 容器仍需要可达的 Job Service API 和 Job Redis broker，默认分别指向宿主机 http://host.docker.internal:8110/internal/v1 与 redis://host.docker.internal:26380/0。
   compose-full 会拒绝与本地 API 混跑；local 会拒绝与 compose-full API 混跑。
-  compose-worker 会拒绝与本地 Worker 混跑；worker 会拒绝与 compose-worker 混跑。
-  worker profile 可用于构建 Worker Pod 形态；worker/dev-worker 启动宿主机 Worker，compose-worker 启动 Docker Worker。
+  compose-full 会拒绝与本地 Worker 混跑；worker 会拒绝与 compose-full Worker 混跑。
+  worker profile 可用于构建 Worker Pod 形态；worker/dev 启动宿主机 Worker，compose-full 启动 Docker Worker。
   down 使用 compose stop，不删除 volume；down/status 也会检查 compose project working_dir，避免误操作其他工作树。
   down 必须显式指定 mode；down all 会先停 local API/Worker，再一次性停止本仓库 compose api/worker/postgres/redis。
 
 成功标准:
   check 成功 = 必需部署文件存在、脚本语法正确、compose 配置可解析或 Docker 未安装时静态检查通过。
-  up compose-worker / compose-full 成功 = compose 已接收启动命令；健康状态使用 status 查看。
+  up compose-full 成功 = compose 已接收启动命令；健康状态使用 status 查看。
 
 常用示例:
   ./scripts/deploy.sh modes
   ./scripts/deploy.sh check
 
-  # 常见本地开发：Docker 只跑依赖，API 在宿主机运行。
+  # 常见本地开发：Docker 只跑依赖，API 和 Worker 在宿主机运行。
   ./scripts/deploy.sh up dev
   ./scripts/deploy.sh status dev
   ./scripts/deploy.sh down dev
 
-  # 精确控制：只操作 API 或依赖。
+  # 精确控制：只操作 API、Worker 或依赖。
   ./scripts/dev.sh restart api
   ./scripts/dev.sh stop api
   ./scripts/dev.sh status
   ./scripts/deploy.sh status compose-deps
 
-  # API/PostgreSQL/Redis 全部由 Compose 管理。
+  # API/Worker/PostgreSQL/Redis 全部由 Compose 管理。
   ./scripts/deploy.sh up compose-full
   ./scripts/deploy.sh status compose-full
-
-  # Docker Worker + 本仓库 PostgreSQL/Redis；Job Service API/Redis broker 需要外部可达。
-  ./scripts/deploy.sh up compose-worker
-  ./scripts/deploy.sh status compose-worker
 
   # 停止本仓库全部 local/compose 服务。
   ./scripts/deploy.sh down all
@@ -136,55 +124,47 @@ EOF
     up|status)
       cat <<EOF
 Usage:
-  ./scripts/deploy.sh ${name} <dev|dev-worker|local|worker|compose-deps|compose-worker|compose-full>
+  ./scripts/deploy.sh ${name} <dev|local|worker|compose-deps|compose-full>
 
 职责:
   对指定部署模型执行 ${name}。
 
 副作用与保护边界:
-  dev 是常用本地开发 recipe，组合执行 compose-deps 与 local。
-  dev-worker 是显式 Worker 开发 recipe，组合执行 compose-deps、local 与 worker。
+  dev 是常用本地开发 recipe，组合执行 compose-deps、local 与 worker。
   local 委托 ./scripts/dev.sh。
   worker 委托 ./scripts/dev.sh 管理宿主机 Worker。
   compose-deps 只管理 PostgreSQL / Redis。
-  compose-worker 管理 Docker Worker / PostgreSQL / Redis，并与 local Worker 互斥。
-  compose-full 管理 API / PostgreSQL / Redis，并与 local API 互斥。
+  compose-full 管理 Docker API / Worker / PostgreSQL / Redis，并与 local API / Worker 互斥。
 
 常用示例:
   ./scripts/deploy.sh ${name} dev
-  ./scripts/deploy.sh ${name} dev-worker
   ./scripts/deploy.sh ${name} local
   ./scripts/deploy.sh ${name} worker
   ./scripts/deploy.sh ${name} compose-deps
-  ./scripts/deploy.sh ${name} compose-worker
   ./scripts/deploy.sh ${name} compose-full
 EOF
       ;;
     down)
       cat <<'EOF'
 Usage:
-  ./scripts/deploy.sh down <dev|dev-worker|local|worker|compose-deps|compose-worker|compose-full|all>
+  ./scripts/deploy.sh down <dev|local|worker|compose-deps|compose-full|all>
 
 职责:
   停止指定部署模型；必须显式传入 mode。
 
 副作用与保护边界:
-  dev 会先停止 local API，再停止 compose-deps。
-  dev-worker 会先停止 local Worker，再停止 local API，最后停止 compose-deps。
+  dev 会先停止 local Worker，再停止 local API，最后停止 compose-deps。
   local 委托 ./scripts/dev.sh stop api。
   worker 委托 ./scripts/dev.sh stop worker。
-  compose-worker 管理 Worker / PostgreSQL / Redis。
-  compose-full 管理 API / PostgreSQL / Redis。
+  compose-full 管理 Docker API / Worker / PostgreSQL / Redis。
   compose-deps 只管理 PostgreSQL / Redis。
   all 会先停止 local API/Worker，再一次性停止本仓库 compose api/worker/postgres/redis。
 
 常用示例:
   ./scripts/deploy.sh down dev
-  ./scripts/deploy.sh down dev-worker
   ./scripts/deploy.sh down local
   ./scripts/deploy.sh down worker
   ./scripts/deploy.sh down compose-deps
-  ./scripts/deploy.sh down compose-worker
   ./scripts/deploy.sh down compose-full
   ./scripts/deploy.sh down all
 EOF
@@ -204,13 +184,11 @@ require_env_file_for_compose() {
 
 show_modes() {
   section "Deployment Modes"
-  event "MODE" "dev" "常用本地开发：compose-deps + 本地 API；适合日常复制粘贴"
-  event "MODE" "dev-worker" "显式 Worker 开发：compose-deps + 本地 API + 本地 Worker"
+  event "MODE" "dev" "常用本地开发：compose-deps + 本地 API + 本地 Worker；适合日常复制粘贴"
   event "MODE" "local" "本地 API 进程；由 ./scripts/dev.sh 管理，适合快速开发"
   event "MODE" "worker" "本地 Worker 进程；由 ./scripts/dev.sh 管理，需显式启动"
   event "MODE" "compose-deps" "只启动 postgres/redis；适合给本地 API 提供依赖"
-  event "MODE" "compose-worker" "Worker/postgres/redis 全部由 compose 管理；需显式启动"
-  event "MODE" "compose-full" "API/postgres/redis 全部由 compose 管理；API 容器启动时执行 migration"
+  event "MODE" "compose-full" "API/Worker/postgres/redis 全部由 compose 管理"
   event "TARGET" "all" "仅用于 down；显式停止 local API/Worker 和本仓库 compose api/worker/postgres/redis"
 }
 
@@ -224,7 +202,7 @@ check_compose_config_if_available() {
   ENV_FILE=.env.example compose --profile app config --quiet
   event "OK" "compose-full" "docker compose --profile app config"
   ENV_FILE=.env.example compose --profile worker config --quiet
-  event "OK" "compose-worker" "docker compose --profile worker config"
+  event "OK" "compose-full-worker-profile" "docker compose --profile worker config"
   if docker info >/dev/null 2>&1; then
     assert_no_compose_project_name_conflict
     event "OK" "compose-project" "no working_dir conflict"
@@ -323,28 +301,12 @@ up_dev() {
   up_deps
   event "RUN" "local" "up"
   up_local
-}
-
-up_dev_worker() {
-  section "Deploy Dev Worker"
-  event "RUN" "compose-deps" "up"
-  up_deps
-  event "RUN" "local" "up"
-  up_local
   event "RUN" "worker" "up"
   up_worker
 }
 
 down_dev() {
   section "Deploy Dev"
-  event "RUN" "local" "down"
-  down_local
-  event "RUN" "compose-deps" "down"
-  down_deps
-}
-
-down_dev_worker() {
-  section "Deploy Dev Worker"
   event "RUN" "worker" "down"
   down_worker
   event "RUN" "local" "down"
@@ -355,14 +317,6 @@ down_dev_worker() {
 
 status_dev() {
   section "Deploy Dev"
-  event "CHECK" "local" "status"
-  status_local
-  event "CHECK" "compose-deps" "status"
-  status_deps
-}
-
-status_dev_worker() {
-  section "Deploy Dev Worker"
   event "CHECK" "local" "status"
   status_local
   event "CHECK" "worker" "status"
@@ -384,7 +338,7 @@ up_deps() {
 down_deps() {
   assert_no_compose_project_name_conflict
   assert_no_compose_full_api_running_for_deps_down
-  assert_no_compose_worker_running_for_deps_down
+  assert_no_compose_full_worker_running_for_deps_down
   assert_no_local_worker_running_for_deps_down
   section "Compose Deps"
   compose stop postgres redis
@@ -394,41 +348,6 @@ status_deps() {
   assert_no_compose_project_name_conflict
   section "Compose Deps"
   compose ps postgres redis
-}
-
-up_compose_worker() {
-  require_env_file_for_compose
-  assert_compose_host_ports_free "compose-worker" \
-    "POSTGRES_HOST_PORT:25435:postgres:5432/tcp" \
-    "REDIS_HOST_PORT:26382:redis:6379/tcp"
-  assert_no_compose_project_name_conflict
-  assert_no_local_worker_running_for_compose_worker
-  assert_compose_worker_broker_reachable
-  section "Compose Worker"
-  compose up -d postgres redis
-  compose --profile worker up -d --build worker
-}
-
-down_compose_worker() {
-  assert_no_compose_project_name_conflict
-  section "Compose Worker"
-  compose --profile worker stop worker
-  assert_no_compose_full_api_running_for_deps_down
-  assert_no_local_worker_running_for_deps_down
-  compose stop postgres redis
-}
-
-status_compose_worker() {
-  local worker_name
-  assert_no_compose_project_name_conflict
-  section "Compose Worker"
-  worker_name="$(compose_service_running worker)"
-  if [[ -n "$worker_name" ]]; then
-    row "worker" "running" "$worker_name"
-  else
-    row "worker" "stopped" "compose-worker container is not running"
-  fi
-  compose --profile worker ps worker postgres redis
 }
 
 compose_api_host_url() {
@@ -447,8 +366,10 @@ up_full() {
     "REDIS_HOST_PORT:26382:redis:6379/tcp"
   assert_no_compose_project_name_conflict
   assert_no_local_api_running_for_compose_full
+  assert_no_local_worker_running_for_compose_full
+  assert_compose_full_worker_broker_reachable
   section "Compose Full"
-  compose --profile app up -d --build api
+  compose --profile app --profile worker up -d --build api worker
   api_url="$(compose_api_host_url)"
   event "INFO" "api" "url=$api_url docs=${api_url}/docs"
 }
@@ -456,16 +377,18 @@ up_full() {
 down_full() {
   assert_no_compose_project_name_conflict
   section "Compose Full"
-  compose --profile app stop api postgres redis
+  compose --profile app --profile worker stop api worker postgres redis
 }
 
 status_full() {
   local api_url
   local api_name
+  local worker_name
   api_url="$(compose_api_host_url)"
   assert_no_compose_project_name_conflict
   section "Compose Full"
   api_name="$(compose_service_running api)"
+  worker_name="$(compose_service_running worker)"
   if [[ -n "$api_name" ]]; then
     row "url" "configured" "$api_url"
     row "docs" "configured" "${api_url}/docs"
@@ -474,7 +397,12 @@ status_full() {
   else
     row "api" "stopped" "compose-full API container is not running"
   fi
-  compose --profile app ps
+  if [[ -n "$worker_name" ]]; then
+    row "worker" "running" "$worker_name"
+  else
+    row "worker" "stopped" "compose-full Worker container is not running"
+  fi
+  compose --profile app --profile worker ps api worker postgres redis
 }
 
 cmd="${1:-}"
@@ -504,9 +432,9 @@ case "$cmd" in
     if args_include_help "$@"; then command_usage "$action"; exit $?; fi
     mode="${1:-}"
     if [[ "$action" == "down" ]]; then
-      [[ -n "$mode" ]] || die "usage: ./scripts/deploy.sh down <dev|dev-worker|local|worker|compose-deps|compose-worker|compose-full|all>" 2
+      [[ -n "$mode" ]] || die "usage: ./scripts/deploy.sh down <dev|local|worker|compose-deps|compose-full|all>" 2
     else
-      [[ -n "$mode" ]] || die "usage: ./scripts/deploy.sh $action <dev|dev-worker|local|worker|compose-deps|compose-worker|compose-full>" 2
+      [[ -n "$mode" ]] || die "usage: ./scripts/deploy.sh $action <dev|local|worker|compose-deps|compose-full>" 2
     fi
     shift
     reject_extra_args "usage: ./scripts/deploy.sh $action $mode" "$@"
@@ -514,9 +442,6 @@ case "$cmd" in
       up:dev) up_dev ;;
       down:dev) down_dev ;;
       status:dev) status_dev ;;
-      up:dev-worker) up_dev_worker ;;
-      down:dev-worker) down_dev_worker ;;
-      status:dev-worker) status_dev_worker ;;
       up:local) up_local ;;
       down:local) down_local ;;
       status:local) status_local ;;
@@ -526,9 +451,6 @@ case "$cmd" in
       up:compose-deps) up_deps ;;
       down:compose-deps) down_deps ;;
       status:compose-deps) status_deps ;;
-      up:compose-worker) up_compose_worker ;;
-      down:compose-worker) down_compose_worker ;;
-      status:compose-worker) status_compose_worker ;;
       up:compose-full) up_full ;;
       down:compose-full) down_full ;;
       status:compose-full) status_full ;;

@@ -17,14 +17,12 @@
   - 重启 Worker：`./scripts/dev.sh restart worker`
   - 查看 Worker：`./scripts/dev.sh status worker`
 - `scripts/deploy.sh` 管理运行模型和 Docker/Compose 服务。
-  - 常用本地开发环境：`./scripts/deploy.sh up dev`
+  - 常用本地开发环境，本机 API / Worker + Docker PostgreSQL / Redis：`./scripts/deploy.sh up dev`
   - 查看常用本地开发环境：`./scripts/deploy.sh status dev`
   - 停止常用本地开发环境：`./scripts/deploy.sh down dev`
-  - 显式 Worker 开发环境：`./scripts/deploy.sh up|status|down dev-worker`
   - 仅宿主机 Worker：`./scripts/deploy.sh up|status|down worker`
   - 仅 Docker 依赖：`./scripts/deploy.sh up|status|down compose-deps`
-  - Docker Worker/依赖：`./scripts/deploy.sh up|status|down compose-worker`
-  - 全 Docker API/依赖：`./scripts/deploy.sh up|status|down compose-full`
+  - 全 Docker API / Worker / 依赖：`./scripts/deploy.sh up|status|down compose-full`
   - 全量停止必须显式使用：`./scripts/deploy.sh down all`
 - 不要使用裸 `./scripts/deploy.sh down`；该命令应报错，避免误停服务。
 - 排查状态优先使用 `status`，不要直接用 `docker stop`、`kill` 或手工清理 PID，除非用户明确要求。

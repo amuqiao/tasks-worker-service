@@ -58,9 +58,9 @@ Scan common local ports:
 
 | Way | Commands | Scope |
 |---|---|---|
-| 日常入口 | `./scripts/deploy.sh up/status/down dev` | Docker PostgreSQL / Redis + 宿主机 API。`dev` 不自动启动 Worker。 |
+| 日常入口 | `./scripts/deploy.sh up/status/down dev` | Docker PostgreSQL / Redis + 宿主机 API + 宿主机 Worker。 |
 | 单进程入口 | `./scripts/dev.sh start/status/stop api|worker` | 只管理宿主机 API 或 Worker 进程，不启动或停止 Docker 依赖。 |
-| 运行模型入口 | `./scripts/deploy.sh up/status/down worker|dev-worker|compose-deps|compose-worker|compose-full` | 显式选择 Worker、依赖、Compose Worker 或全 Compose API 模型。 |
+| 运行模型入口 | `./scripts/deploy.sh up/status/down local|worker|compose-deps|compose-full` | 精确选择本机组件、Docker 依赖或全 Docker 模型。 |
 
 Start the common local development stack:
 
@@ -68,7 +68,7 @@ Start the common local development stack:
 ./scripts/deploy.sh up dev
 ```
 
-This starts PostgreSQL and Redis with Docker Compose, then starts the FastAPI app on the host. The app process can start without opening a database connection, but `/ready` and the `items` API require a reachable PostgreSQL database unless tests inject a session override.
+This starts PostgreSQL and Redis with Docker Compose, then starts the FastAPI app and Worker runner on the host. The app process can start without opening a database connection, but `/ready` and the `items` API require a reachable PostgreSQL database unless tests inject a session override.
 
 Run only local dependencies with Docker Compose:
 
@@ -82,21 +82,13 @@ Run only the host API:
 ./scripts/dev.sh start api
 ```
 
-Run the API, PostgreSQL, and Redis in Compose:
+Run the API, Worker, PostgreSQL, and Redis in Compose:
 
 ```bash
 ./scripts/deploy.sh up compose-full
 ```
 
-Run the Docker Worker with this service's PostgreSQL and Redis in Compose. The Job Service API and Job Redis broker are external dependencies:
-
-```bash
-./scripts/deploy.sh up compose-worker
-./scripts/deploy.sh status compose-worker
-./scripts/deploy.sh down compose-worker
-```
-
-`compose-worker` starts the Worker container and this repository's compose dependencies, but it still needs a reachable Job Service API and Job Redis broker. By default the Worker container calls `http://host.docker.internal:8110/internal/v1` and consumes `redis://host.docker.internal:26380/0`; override `WORKER__JOB_SERVICE_BASE_URL` and `TASKIQ__REDIS_URL` when Job Service is elsewhere.
+The Docker Worker still needs a reachable Job Service API and Job Redis broker. By default the Worker container calls `http://host.docker.internal:8110/internal/v1` and consumes `redis://host.docker.internal:26380/0`; override `WORKER__JOB_SERVICE_BASE_URL` and `TASKIQ__REDIS_URL` when Job Service is elsewhere.
 
 Run the Job Platform worker on the host:
 

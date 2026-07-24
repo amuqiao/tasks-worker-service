@@ -39,6 +39,30 @@ def wait_for_tcp_port(port: int, timeout: float = 5.0) -> None:
     raise AssertionError(f"port did not open: {port}")
 
 
+def write_empty_ps(bin_dir: Path) -> None:
+    ps = bin_dir / "ps"
+    ps.write_text(
+        """#!/usr/bin/env sh
+exit 0
+"""
+    )
+    ps.chmod(0o755)
+
+
+def write_filtered_worker_ps(bin_dir: Path) -> None:
+    ps = bin_dir / "ps"
+    ps.write_text(
+        """#!/usr/bin/env sh
+if [ "$1" = "-axo" ]; then
+  /bin/ps "$@" | grep "$FAKE_WORKER_PYTHON" || true
+  exit 0
+fi
+exec /bin/ps "$@"
+"""
+    )
+    ps.chmod(0o755)
+
+
 def write_fake_worker_uv(tmp_path: Path) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -389,6 +413,7 @@ def test_start_status_logs_stop_worker_lifecycle(tmp_path):
     if not shutil.which("lsof"):
         pytest.skip("lsof is required by dev.sh worker ownership checks")
     bin_dir = write_fake_worker_uv(tmp_path)
+    write_filtered_worker_ps(bin_dir)
     env = script_env(
         tmp_path,
         PATH=f"{bin_dir}:{os.environ['PATH']}",
@@ -449,6 +474,7 @@ def test_start_worker_restarts_owned_process_when_worker_config_changes(tmp_path
     if not shutil.which("lsof"):
         pytest.skip("lsof is required by dev.sh worker ownership checks")
     bin_dir = write_fake_worker_uv(tmp_path)
+    write_filtered_worker_ps(bin_dir)
     first_env = script_env(
         tmp_path,
         PATH=f"{bin_dir}:{os.environ['PATH']}",
@@ -507,6 +533,7 @@ def test_deploy_down_compose_deps_rejects_running_worker_even_when_config_change
     if not shutil.which("lsof"):
         pytest.skip("lsof is required by dev.sh worker ownership checks")
     bin_dir = write_fake_worker_uv(tmp_path)
+    write_filtered_worker_ps(bin_dir)
     docker = bin_dir / "docker"
     docker.write_text(
         """#!/usr/bin/env sh
@@ -570,13 +597,15 @@ exit 1
         )
 
 
-def test_deploy_down_dev_stops_api_before_worker_blocks_deps(tmp_path):
+def test_deploy_down_dev_stops_worker_api_and_deps(tmp_path):
     if not shutil.which("lsof"):
         pytest.skip("lsof is required by dev.sh worker ownership checks")
     bin_dir = write_fake_worker_uv(tmp_path)
+    write_filtered_worker_ps(bin_dir)
+    log_file = tmp_path / "calls.log"
     docker = bin_dir / "docker"
     docker.write_text(
-        """#!/usr/bin/env sh
+        f"""#!/usr/bin/env sh
 if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
   exit 0
 fi
@@ -584,7 +613,7 @@ if [ "$1" = "ps" ]; then
   exit 0
 fi
 if [ "$1" = "compose" ]; then
-  echo "unexpected compose stop" >&2
+  echo "docker $@" >> "{log_file}"
   exit 0
 fi
 exit 1
@@ -618,11 +647,13 @@ exit 1
             env=env,
         )
 
-        assert result.returncode == 4
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "RUN       worker" in result.stdout
+        assert "STOPPED   worker" in result.stdout
         assert "RUN       local" in result.stdout
         assert "STOPPED   api" in result.stdout
-        assert "local worker is running" in result.stderr
-        assert "unexpected compose stop" not in result.stderr
+        assert "RUN       compose-deps" in result.stdout
+        assert any("stop postgres redis" in call for call in log_file.read_text().splitlines())
     finally:
         subprocess.run(
             ["./scripts/dev.sh", "stop", "worker"],
@@ -697,7 +728,7 @@ def test_start_worker_rejects_unmanaged_repo_worker_process(tmp_path):
         unmanaged.wait(timeout=5)
 
 
-def test_start_worker_rejects_running_compose_worker(tmp_path):
+def test_start_worker_rejects_running_compose_full_worker(tmp_path):
     bin_dir = write_fake_worker_uv(tmp_path)
     docker = bin_dir / "docker"
     docker.write_text(
@@ -732,7 +763,7 @@ exit 1
     )
 
     assert result.returncode == 4
-    assert "compose worker is running" in result.stderr
+    assert "compose-full worker is running" in result.stderr
 
 
 def test_stale_pid_with_matching_command_but_wrong_cwd_is_not_killed(tmp_path):
@@ -1021,8 +1052,9 @@ def test_deploy_modes_smoke():
     assert result.returncode == 0
     assert "local" in result.stdout
     assert "compose-deps" in result.stdout
-    assert "compose-worker" in result.stdout
     assert "compose-full" in result.stdout
+    assert "dev-worker" not in result.stdout
+    assert "compose-worker" not in result.stdout
 
 
 def test_deploy_local_status_delegates_to_dev_status():
@@ -1037,8 +1069,9 @@ def test_deploy_compose_subcommand_help():
 
     assert result.returncode == 0
     assert "compose-deps" in result.stdout
-    assert "compose-worker" in result.stdout
     assert "compose-full" in result.stdout
+    assert "dev-worker" not in result.stdout
+    assert "compose-worker" not in result.stdout
 
 
 def test_deploy_down_without_mode_requires_explicit_target(tmp_path):
@@ -1052,7 +1085,7 @@ def test_deploy_down_without_mode_requires_explicit_target(tmp_path):
     )
 
     assert result.returncode == 2
-    assert "usage: ./scripts/deploy.sh down <dev|dev-worker|local|worker|compose-deps|compose-worker|compose-full|all>" in result.stderr
+    assert "usage: ./scripts/deploy.sh down <dev|local|worker|compose-deps|compose-full|all>" in result.stderr
     assert result.stdout == ""
 
 
@@ -1141,10 +1174,11 @@ def test_deploy_down_local_keeps_targeted_behavior_without_compose(tmp_path):
     assert "STOPPED" in result.stdout
 
 
-def test_deploy_compose_worker_manages_docker_worker_profile(tmp_path):
+def test_deploy_compose_full_manages_docker_api_and_worker_profiles(tmp_path):
     bin_dir = tmp_path / "bin"
     log_file = tmp_path / "calls.log"
     bin_dir.mkdir()
+    write_empty_ps(bin_dir)
     docker = bin_dir / "docker"
     docker.write_text(
         f"""#!/usr/bin/env sh
@@ -1175,7 +1209,7 @@ exit 1
         )
 
         up = subprocess.run(
-            ["./scripts/deploy.sh", "up", "compose-worker"],
+            ["./scripts/deploy.sh", "up", "compose-full"],
             cwd=ROOT_DIR,
             text=True,
             capture_output=True,
@@ -1183,7 +1217,7 @@ exit 1
             env=env,
         )
         status = subprocess.run(
-            ["./scripts/deploy.sh", "status", "compose-worker"],
+            ["./scripts/deploy.sh", "status", "compose-full"],
             cwd=ROOT_DIR,
             text=True,
             capture_output=True,
@@ -1191,7 +1225,7 @@ exit 1
             env=env,
         )
         down = subprocess.run(
-            ["./scripts/deploy.sh", "down", "compose-worker"],
+            ["./scripts/deploy.sh", "down", "compose-full"],
             cwd=ROOT_DIR,
             text=True,
             capture_output=True,
@@ -1200,22 +1234,21 @@ exit 1
         )
 
     assert up.returncode == 0, up.stdout + up.stderr
-    assert "== Compose Worker ==" in up.stdout
+    assert "== Compose Full ==" in up.stdout
     assert status.returncode == 0, status.stdout + status.stderr
-    assert "== Compose Worker ==" in status.stdout
+    assert "== Compose Full ==" in status.stdout
     assert down.returncode == 0, down.stdout + down.stderr
     calls = log_file.read_text().splitlines()
-    assert any("up -d postgres redis" in call for call in calls)
-    assert any("--profile worker up -d --build worker" in call for call in calls)
-    assert any("--profile worker ps worker postgres redis" in call for call in calls)
-    assert any("--profile worker stop worker" in call for call in calls)
-    assert any("stop postgres redis" in call for call in calls)
+    assert any("--profile app --profile worker up -d --build api worker" in call for call in calls)
+    assert any("--profile app --profile worker ps api worker postgres redis" in call for call in calls)
+    assert any("--profile app --profile worker stop api worker postgres redis" in call for call in calls)
 
 
-def test_deploy_compose_worker_rejects_missing_job_broker(tmp_path):
+def test_deploy_compose_full_rejects_missing_job_broker(tmp_path):
     bin_dir = tmp_path / "bin"
     log_file = tmp_path / "calls.log"
     bin_dir.mkdir()
+    write_empty_ps(bin_dir)
     docker = bin_dir / "docker"
     docker.write_text(
         f"""#!/usr/bin/env sh
@@ -1242,7 +1275,7 @@ exit 1
     )
 
     result = subprocess.run(
-        ["./scripts/deploy.sh", "up", "compose-worker"],
+        ["./scripts/deploy.sh", "up", "compose-full"],
         cwd=ROOT_DIR,
         text=True,
         capture_output=True,
@@ -1253,10 +1286,11 @@ exit 1
     assert result.returncode == 4
     assert "Job Service Redis broker" in result.stderr
     assert "not listening" in result.stderr
-    assert not log_file.exists()
+    calls = log_file.read_text().splitlines() if log_file.exists() else []
+    assert not any("up -d --build" in call for call in calls)
 
 
-def test_deploy_compose_worker_rejects_unmanaged_local_worker(tmp_path):
+def test_deploy_compose_full_rejects_unmanaged_local_worker(tmp_path):
     bin_dir = tmp_path / "bin"
     log_file = tmp_path / "calls.log"
     bin_dir.mkdir()
@@ -1303,7 +1337,7 @@ exit 1
         time.sleep(0.2)
 
         result = subprocess.run(
-            ["./scripts/deploy.sh", "up", "compose-worker"],
+            ["./scripts/deploy.sh", "up", "compose-full"],
             cwd=ROOT_DIR,
             text=True,
             capture_output=True,
@@ -1319,7 +1353,7 @@ exit 1
         unmanaged.wait(timeout=5)
 
 
-def test_deploy_compose_deps_down_rejects_running_compose_worker(tmp_path):
+def test_deploy_compose_deps_down_rejects_running_compose_full_worker(tmp_path):
     bin_dir = tmp_path / "bin"
     log_file = tmp_path / "calls.log"
     bin_dir.mkdir()
@@ -1354,28 +1388,17 @@ exit 1
     )
 
     assert result.returncode == 4
-    assert "compose worker is running" in result.stderr
+    assert "compose-full worker is running" in result.stderr
     assert not log_file.exists()
 
 
-def test_deploy_compose_worker_down_keeps_deps_when_compose_api_is_running(tmp_path):
+def test_deleted_worker_modes_are_rejected(tmp_path):
     bin_dir = tmp_path / "bin"
-    log_file = tmp_path / "calls.log"
     bin_dir.mkdir()
     docker = bin_dir / "docker"
     docker.write_text(
-        f"""#!/usr/bin/env sh
+        """#!/usr/bin/env sh
 if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
-  exit 0
-fi
-if [ "$1" = "ps" ]; then
-  case "$*" in
-    *"com.docker.compose.service=api"*) echo "tasks-worker-service-api-1"; exit 0 ;;
-    *) exit 0 ;;
-  esac
-fi
-if [ "$1" = "compose" ]; then
-  echo "docker $@" >> "{log_file}"
   exit 0
 fi
 exit 1
@@ -1383,7 +1406,7 @@ exit 1
     )
     docker.chmod(0o755)
 
-    result = subprocess.run(
+    compose_worker = subprocess.run(
         ["./scripts/deploy.sh", "down", "compose-worker"],
         cwd=ROOT_DIR,
         text=True,
@@ -1391,12 +1414,19 @@ exit 1
         check=False,
         env=script_env(tmp_path, PATH=f"{bin_dir}:{os.environ['PATH']}"),
     )
+    dev_worker = subprocess.run(
+        ["./scripts/deploy.sh", "status", "dev-worker"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path, PATH=f"{bin_dir}:{os.environ['PATH']}"),
+    )
 
-    assert result.returncode == 4
-    assert "compose-full api is running" in result.stderr
-    calls = log_file.read_text().splitlines()
-    assert any("--profile worker stop worker" in call for call in calls)
-    assert not any("stop postgres redis" in call for call in calls)
+    assert compose_worker.returncode == 2
+    assert "unknown deploy mode for down: compose-worker" in compose_worker.stderr
+    assert dev_worker.returncode == 2
+    assert "unknown deploy mode for status: dev-worker" in dev_worker.stderr
 
 
 def test_deploy_compose_deps_rejects_busy_host_port_before_docker(tmp_path):

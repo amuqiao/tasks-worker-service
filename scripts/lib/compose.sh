@@ -96,7 +96,7 @@ redis_url_host_port() {
   printf "%s %s" "$host" "$port"
 }
 
-assert_compose_worker_broker_reachable() {
+assert_compose_full_worker_broker_reachable() {
   local url
   local host
   local port
@@ -114,7 +114,7 @@ assert_compose_worker_broker_reachable() {
     127.0.0.1|localhost|0.0.0.0|host.docker.internal)
       owner_pids="$(host_port_listener_pids "$port")"
       if [[ -z "$owner_pids" ]]; then
-        die "compose-worker requires Job Service Redis broker at TASKIQ__REDIS_URL=$url, but host port $port is not listening; start Job Service first or set TASKIQ__REDIS_URL" 4
+        die "compose-full worker requires Job Service Redis broker at TASKIQ__REDIS_URL=$url, but host port $port is not listening; start Job Service first or set TASKIQ__REDIS_URL" 4
       fi
       event "RUNNING" "broker" "TASKIQ__REDIS_URL=$url pid(s): $owner_pids"
       return 0

@@ -64,7 +64,7 @@ compose_api_running() {
     --format '{{.Names}}' 2>/dev/null | head -n 1
 }
 
-compose_worker_running() {
+compose_full_worker_running() {
   compose_available || return 1
   docker ps \
     --filter "label=com.docker.compose.project.working_dir=$ROOT_DIR" \
@@ -79,11 +79,11 @@ assert_no_compose_full_api_running_for_local() {
   die "compose-full api is running: $api_name. Stop it before local dev with: ./scripts/deploy.sh down compose-full" 4
 }
 
-assert_no_compose_worker_running_for_local() {
+assert_no_compose_full_worker_running_for_local() {
   local worker_name
-  worker_name="$(compose_worker_running)"
+  worker_name="$(compose_full_worker_running)"
   [[ -z "$worker_name" ]] && return 0
-  die "compose worker is running: $worker_name. Stop it before local worker with: ./scripts/deploy.sh down compose-worker" 4
+  die "compose-full worker is running: $worker_name. Stop it before local worker with: ./scripts/deploy.sh down compose-full" 4
 }
 
 assert_no_compose_full_api_running_for_deps_down() {
@@ -93,26 +93,26 @@ assert_no_compose_full_api_running_for_deps_down() {
   die "compose-full api is running: $api_name. Stop compose-full before stopping deps with: ./scripts/deploy.sh down compose-full" 4
 }
 
-assert_no_compose_worker_running_for_deps_down() {
+assert_no_compose_full_worker_running_for_deps_down() {
   local worker_name
-  worker_name="$(compose_worker_running)"
+  worker_name="$(compose_full_worker_running)"
   [[ -z "$worker_name" ]] && return 0
-  die "compose worker is running: $worker_name. Stop compose-worker before stopping deps with: ./scripts/deploy.sh down compose-worker" 4
+  die "compose-full worker is running: $worker_name. Stop compose-full before stopping deps with: ./scripts/deploy.sh down compose-full" 4
 }
 
 assert_no_local_worker_running_for_deps_down() {
   local worker_pids
   worker_pids="$(repo_worker_process_pids | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
   if [[ -n "$worker_pids" ]]; then
-    die "local worker is running: pid(s) $worker_pids. Stop it before stopping deps with: ./scripts/deploy.sh down worker or ./scripts/deploy.sh down dev-worker" 4
+    die "local worker is running: pid(s) $worker_pids. Stop it before stopping deps with: ./scripts/deploy.sh down worker or ./scripts/deploy.sh down dev" 4
   fi
 }
 
-assert_no_local_worker_running_for_compose_worker() {
+assert_no_local_worker_running_for_compose_full() {
   local worker_pids
   worker_pids="$(repo_worker_process_pids | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
   if [[ -n "$worker_pids" ]]; then
-    die "local worker is running: pid(s) $worker_pids. Stop it before compose-worker with: ./scripts/deploy.sh down worker" 4
+    die "local worker is running: pid(s) $worker_pids. Stop it before compose-full with: ./scripts/deploy.sh down worker" 4
   fi
 }
 

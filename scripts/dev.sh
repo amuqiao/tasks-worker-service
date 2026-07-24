@@ -70,7 +70,7 @@ Usage:
   ./scripts/dev.sh doctor
   ./scripts/dev.sh ports 8130 25435 26382
 
-  # 常见本地开发：Docker 依赖 + 本地 API。
+  # 常见本地开发：Docker 依赖 + 本地 API + 本地 Worker。
   ./scripts/deploy.sh up dev
   ./scripts/deploy.sh status dev
   ./scripts/deploy.sh down dev
@@ -403,7 +403,7 @@ start_worker() {
   fi
   require_uv
   require_process_identity_check
-  assert_no_compose_worker_running_for_local
+  assert_no_compose_full_worker_running_for_local
   existing_pid="$(worker_pid)"
   if [[ -n "$existing_pid" ]]; then
     stop_worker

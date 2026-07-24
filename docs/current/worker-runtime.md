@@ -22,8 +22,8 @@ taskiq Redis Stream
 |---|---|
 | `scripts/dev.sh start|stop|restart|status worker` | 宿主机本地 Worker 生命周期管理，使用 PID/meta/log 保护只操作当前仓库启动的 worker。 |
 | `scripts/deploy.sh up|down|status worker` | 委托 `dev.sh` 管理宿主机 Worker，不启动或停止 Docker 依赖。 |
-| `scripts/deploy.sh up|down|status dev-worker` | 显式本地 Worker 开发 recipe，组合 Docker PostgreSQL / Redis、本地 API 和本地 Worker。 |
-| `scripts/deploy.sh up|down|status compose-worker` | Docker Worker recipe，组合本仓库 Docker PostgreSQL / Redis 和 Docker Worker；Worker 容器仍需要可达的 Job Service API 和 Job Redis broker，默认分别调用宿主机 `http://host.docker.internal:8110/internal/v1` 与 `redis://host.docker.internal:26380/0`。 |
+| `scripts/deploy.sh up|down|status dev` | 日常本地开发入口，组合 Docker PostgreSQL / Redis、本地 API 和本地 Worker。 |
+| `scripts/deploy.sh up|down|status compose-full` | Docker 全量入口，组合 Docker API、Worker、PostgreSQL 和 Redis；Worker 容器仍需要可达的 Job Service API 和 Job Redis broker，默认分别调用宿主机 `http://host.docker.internal:8110/internal/v1` 与 `redis://host.docker.internal:26380/0`。 |
 | `start-worker.sh` | Worker Pod/容器入口，执行 `python -m app.job_platform_worker.runner`。 |
 | `app.job_platform_worker.runner` | 直接监听 `RedisStreamBroker.listen()`，按 runtime 返回值显式调用或跳过 `message.ack()`。 |
 | `app.job_platform_worker.taskiq_app` | 创建 Redis Stream broker；不注册默认 `taskiq worker` 消费入口。 |
