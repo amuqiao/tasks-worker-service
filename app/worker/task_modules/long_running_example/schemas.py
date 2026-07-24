@@ -7,6 +7,7 @@ class LongRunningTaskInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     steps: int = Field(default=3, ge=1, le=100)
+    delay_seconds: float = Field(default=0, ge=0, le=5)
 
 
 class LongRunningTaskOutput(BaseModel):

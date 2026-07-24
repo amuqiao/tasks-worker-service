@@ -120,3 +120,13 @@ class FailAttemptResponse(StrictBaseModel):
     retry_scheduled: bool
     next_attempt_id: str | None
     run_status: str
+
+
+class CancelAttemptRequest(StrictBaseModel):
+    lease_token: str
+    reason: str
+
+
+class CancelAttemptResponse(StrictBaseModel):
+    accepted: bool
+    run_status: str

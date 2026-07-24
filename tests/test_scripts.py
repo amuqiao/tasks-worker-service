@@ -421,6 +421,56 @@ def test_start_status_stop_api_lifecycle(tmp_path):
         )
 
 
+def test_start_api_restarts_owned_process_when_api_url_changes(tmp_path):
+    if not shutil.which("curl"):
+        pytest.skip("curl is required by dev.sh start api")
+    first_port = unused_port()
+    second_port = unused_port()
+    first_env = script_env(tmp_path, API_PORT=str(first_port))
+    second_env = script_env(tmp_path, API_PORT=str(second_port))
+    old_pid = ""
+
+    try:
+        first = subprocess.run(
+            ["./scripts/dev.sh", "start", "api"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=first_env,
+        )
+        assert first.returncode == 0, first.stdout + first.stderr
+        old_pid = (tmp_path / "run" / "api.pid").read_text().strip()
+        assert f"url=http://127.0.0.1:{first_port}" in (tmp_path / "run" / "api.meta").read_text()
+
+        second = subprocess.run(
+            ["./scripts/dev.sh", "start", "api"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=second_env,
+        )
+        assert second.returncode == 0, second.stdout + second.stderr
+        assert "STOPPED" in second.stdout
+        assert "STARTED" in second.stdout
+        new_pid = (tmp_path / "run" / "api.pid").read_text().strip()
+        assert new_pid != old_pid
+        assert f"url=http://127.0.0.1:{second_port}" in (tmp_path / "run" / "api.meta").read_text()
+        assert subprocess.run(["ps", "-p", old_pid], check=False, capture_output=True).returncode != 0
+    finally:
+        subprocess.run(
+            ["./scripts/dev.sh", "stop", "api"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=second_env,
+        )
+        if old_pid:
+            subprocess.run(["kill", old_pid], check=False, capture_output=True)
+
+
 def test_restart_without_target_defaults_to_api(tmp_path):
     if not shutil.which("curl"):
         pytest.skip("curl is required by dev.sh restart")

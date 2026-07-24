@@ -95,7 +95,7 @@ async def run_queue_envelope(
     except WorkerLeaseLost as exc:
         return _no_ack("lease_lost", message=str(exc))
     except WorkerCancelRequested as exc:
-        return _no_ack("cancel_requested", message=str(exc))
+        return await _report_handler_cancelled(client, envelope, lease_token, exc)
     except Exception as exc:
         return await _report_handler_failure(client, envelope, lease_token, exc)
 
@@ -250,3 +250,22 @@ async def _report_handler_failure(
     except (httpx.TransportError, JobServiceProtocolError) as api_exc:
         return _no_ack("fail_unknown", error_type=type(api_exc).__name__, message=str(api_exc))
     return _ack("failed", run_status=failed.run_status, retry_scheduled=failed.retry_scheduled)
+
+
+async def _report_handler_cancelled(
+    client: JobServiceClient,
+    envelope: QueueEnvelope,
+    lease_token: str,
+    exc: WorkerCancelRequested,
+) -> WorkerRunResult:
+    try:
+        cancelled = await client.cancel_attempt(
+            envelope,
+            lease_token=lease_token,
+            reason=str(exc)[:500],
+        )
+    except JobServiceApiError as api_exc:
+        return _no_ack("cancel_rejected", **_api_error_details(api_exc))
+    except (httpx.TransportError, JobServiceProtocolError) as api_exc:
+        return _no_ack("cancel_unknown", error_type=type(api_exc).__name__, message=str(api_exc))
+    return _ack("cancelled", run_status=cancelled.run_status)

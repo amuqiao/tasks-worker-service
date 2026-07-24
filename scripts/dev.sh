@@ -296,6 +296,7 @@ run_api() {
 start_api() {
   local python_bin
   local pid
+  local existing_pid
   validate_port API_PORT "$API_PORT"
   if api_running; then
     event "RUNNING" "api" "pid=$(api_pid) url=$API_URL docs=$API_DOCS_URL"
@@ -304,6 +305,10 @@ start_api() {
   require_uv
   require_command curl "install curl first"
   require_process_identity_check
+  existing_pid="$(api_pid)"
+  if [[ -n "$existing_pid" ]]; then
+    stop_api
+  fi
   ensure_runtime_dirs
   assert_no_compose_full_api_running_for_local
   assert_api_port_free
@@ -336,15 +341,18 @@ stop_api() {
     event "STALE" "api" "removed pid file for unowned pid=$pid"
     return 0
   fi
+  if [[ -n "$pid" ]] && pid_running "$pid" && api_pid_owned "$pid"; then
+    kill "$pid"
+    rm -f "$API_PID_FILE" "$API_META_FILE"
+    event "STOPPED" "api" "pid=$pid"
+    return 0
+  fi
   if ! api_running; then
     rm -f "$API_PID_FILE"
     rm -f "$API_META_FILE"
     event "STOPPED" "api" "not running"
     return 0
   fi
-  kill "$pid"
-  rm -f "$API_PID_FILE" "$API_META_FILE"
-  event "STOPPED" "api" "pid=$pid"
 }
 
 status_api() {
@@ -381,7 +389,7 @@ migrate() {
   require_uv
   section "Database"
   cd "$ROOT_DIR"
-  uv run alembic upgrade head
+  uv run python -m alembic upgrade head
 }
 
 scan_ports() {
@@ -468,7 +476,7 @@ case "$cmd" in
     if args_include_help "$@"; then command_usage "$cmd"; exit $?; fi
     reject_extra_args "usage: ./scripts/dev.sh test" "$@"
     cd "$ROOT_DIR"
-    uv run pytest
+    uv run python -m pytest
     ;;
   *)
     usage >&2

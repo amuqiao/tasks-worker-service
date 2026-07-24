@@ -8,6 +8,8 @@ from pydantic import ValidationError
 from app.job_platform_worker.protocol import (
     AcquireAttemptRequest,
     AcquireAttemptResponse,
+    CancelAttemptRequest,
+    CancelAttemptResponse,
     CompleteAttemptRequest,
     CompleteAttemptResponse,
     ErrorEnvelope,
@@ -144,6 +146,21 @@ class JobServiceClient:
             trace_id=envelope.trace_id,
         )
         return FailAttemptResponse.model_validate(data)
+
+    async def cancel_attempt(
+        self,
+        envelope: QueueEnvelope,
+        *,
+        lease_token: str,
+        reason: str,
+    ) -> CancelAttemptResponse:
+        payload = CancelAttemptRequest(lease_token=lease_token, reason=reason)
+        data = await self._post(
+            f"/attempts/{envelope.attempt_id}/cancel",
+            payload.model_dump(mode="json"),
+            trace_id=envelope.trace_id,
+        )
+        return CancelAttemptResponse.model_validate(data)
 
     async def _post(self, path: str, payload: dict, *, trace_id: str) -> dict:
         response = await self._http_client.post(

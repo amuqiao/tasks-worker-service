@@ -120,6 +120,12 @@ api_pid_owned() {
   process_has_open_file "$pid" "$API_LOG_FILE"
 }
 
+api_pid_matches_current_config() {
+  local pid="$1"
+  api_pid_owned "$pid" || return 1
+  grep -Fx "url=$API_URL" "$API_META_FILE" >/dev/null 2>&1 || return 1
+}
+
 pid_running() {
   local pid="$1"
   [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
@@ -128,7 +134,7 @@ pid_running() {
 api_running() {
   local pid
   pid="$(api_pid)"
-  pid_running "$pid" && api_pid_owned "$pid"
+  pid_running "$pid" && api_pid_matches_current_config "$pid"
 }
 
 port_owner_pid() {

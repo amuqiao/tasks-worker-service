@@ -17,7 +17,7 @@ class LongRunningTaskService:
             context.raise_if_cancel_requested()
             percent = round(step * 100 / payload.steps)
             await context.report_progress(percent, f"step {step}/{payload.steps}")
-            await asyncio.sleep(0)
+            await asyncio.sleep(payload.delay_seconds)
         context.raise_if_cancel_requested()
         return LongRunningTaskOutput(
             ok=True,

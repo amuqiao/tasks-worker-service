@@ -57,6 +57,7 @@ class FakeJobClient:
     def __init__(self) -> None:
         self.completed: list[dict[str, Any]] = []
         self.failed: list[dict[str, Any]] = []
+        self.cancelled: list[dict[str, Any]] = []
         self.heartbeats: list[dict[str, Any]] = []
 
     async def acquire_attempt(self, envelope: QueueEnvelope, *, worker_session_id: str, worker_name: str):
@@ -105,6 +106,16 @@ class FakeJobClient:
             }
         )
         return _Response(run_status="failed", retry_scheduled=False)
+
+    async def cancel_attempt(
+        self,
+        envelope: QueueEnvelope,
+        *,
+        lease_token: str,
+        reason: str,
+    ):
+        self.cancelled.append({"lease_token": lease_token, "reason": reason})
+        return _Response(run_status="cancelled")
 
 
 class _Response:
@@ -280,13 +291,14 @@ async def test_run_queue_envelope_does_not_start_handler_when_acquire_reports_ca
         context=_context(),
     )
 
-    assert result.ack_decision == "no_ack"
-    assert result.status == "cancel_requested"
+    assert result.ack_decision == "ack"
+    assert result.status == "cancelled"
     assert client.completed == []
+    assert client.cancelled == [{"lease_token": "lease-1", "reason": "Job Service reported cancel_requested during acquire"}]
     assert client.heartbeats == []
 
 
-async def test_run_queue_envelope_no_acks_when_background_heartbeat_reports_cancel() -> None:
+async def test_run_queue_envelope_cancels_and_acks_when_background_heartbeat_reports_cancel() -> None:
     class SlowHandler:
         async def handle(self, envelope: QueueEnvelope, context: WorkerContext) -> HandlerResult:
             await asyncio.sleep(0.02)
@@ -323,9 +335,10 @@ async def test_run_queue_envelope_no_acks_when_background_heartbeat_reports_canc
         context=_context(),
     )
 
-    assert result.ack_decision == "no_ack"
-    assert result.status == "cancel_requested"
+    assert result.ack_decision == "ack"
+    assert result.status == "cancelled"
     assert client.completed == []
+    assert client.cancelled == [{"lease_token": "lease-1", "reason": "Job Service reported cancel_requested during heartbeat"}]
     assert client.heartbeats
 
 
@@ -356,7 +369,7 @@ async def test_run_queue_envelope_exposes_progress_reporter_to_handler() -> None
     ]
 
 
-async def test_run_queue_envelope_no_acks_when_progress_reports_cancel() -> None:
+async def test_run_queue_envelope_cancels_and_acks_when_progress_reports_cancel() -> None:
     class ProgressHandler:
         async def handle(self, envelope: QueueEnvelope, context: WorkerContext) -> HandlerResult:
             await context.report_progress(50, "halfway")
@@ -390,9 +403,12 @@ async def test_run_queue_envelope_no_acks_when_progress_reports_cancel() -> None
         context=_context(),
     )
 
-    assert result.ack_decision == "no_ack"
-    assert result.status == "cancel_requested"
+    assert result.ack_decision == "ack"
+    assert result.status == "cancelled"
     assert client.completed == []
+    assert client.cancelled == [
+        {"lease_token": "lease-1", "reason": "Job Service reported cancel_requested during progress heartbeat"}
+    ]
     assert client.heartbeats == [
         {
             "lease_token": "lease-1",
