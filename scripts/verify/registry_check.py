@@ -19,6 +19,7 @@ REQUIRED_DOCS = (
     ROOT_DIR / "docs/README.md",
     ROOT_DIR / "docs/current/implementation.md",
     ROOT_DIR / "docs/current/worker-runtime.md",
+    ROOT_DIR / "docs/current/worker-example-config.md",
     ROOT_DIR / "docs/current/worker-template.md",
     ROOT_DIR / "docs/contracts/api-contract.md",
     ROOT_DIR / "docs/contracts/extension-contract.md",

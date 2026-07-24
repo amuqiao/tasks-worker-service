@@ -87,6 +87,7 @@ def test_required_docs_include_worker_template_docs():
     required = {path.as_posix() for path in REQUIRED_DOCS}
 
     assert any(path.endswith("docs/README.md") for path in required)
+    assert any(path.endswith("docs/current/worker-example-config.md") for path in required)
     assert any(path.endswith("docs/current/worker-template.md") for path in required)
     assert any(path.endswith("docs/current/worker-runtime.md") for path in required)
     assert any(path.endswith("scripts/README.md") for path in required)

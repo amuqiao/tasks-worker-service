@@ -2,6 +2,8 @@
 
 本文说明当前仓库作为 Job Platform Worker 模板时的目录边界、业务 task 接入方式、注册流程和验收要求。读者应该能按本文复制模板、添加一个业务 task、注册到 Job Service，并用跨服务 smoke 验证链路。
 
+如果你还没有确认 worker identity、queue、manifest、token 和 Business caller 如何对应，先读 [`worker-example-config.md`](worker-example-config.md)。
+
 ## 整体模型
 
 当前模板把 Job Platform 对接层和业务层分开维护：
@@ -348,7 +350,7 @@ FASTAPI_LITE_REDIS_STREAM_URL=redis://127.0.0.1:36379/0 ./scripts/verify.sh redi
 该 smoke 默认指向本地 `tasks-platform` 仓库，并默认启动自己的临时 Job Service API：
 
 ```dotenv
-JOB_PLATFORM_REPO=/Users/admin/Code/tasks-platform
+JOB_PLATFORM_REPO=../tasks-platform
 JOB_PLATFORM_BASE_URL=http://127.0.0.1:8110
 JOB_PLATFORM_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:25433/job_platform
 JOB_PLATFORM_REDIS_URL=redis://127.0.0.1:26380/0
