@@ -135,6 +135,7 @@ Worker runtime 的运行入口、配置和 ack/no_ack broker 语义记录在 [`w
 - `./scripts/deploy.sh up|down|status local`
 - `./scripts/deploy.sh up|down|status worker`
 - `./scripts/deploy.sh up|down|status compose-deps`
+- `./scripts/deploy.sh up|down|status compose-worker`
 - `./scripts/deploy.sh up|down|status compose-full`
 - `./start-worker.sh`
 - `./scripts/verify.sh check`
@@ -146,7 +147,7 @@ Worker runtime 的运行入口、配置和 ack/no_ack broker 语义记录在 [`w
 - `./scripts/tools.sh secret`
 - `./scripts/tools.sh env-url`
 
-`dev.sh` 当前提供本地 API / Worker 进程管理、端口扫描、环境检查、迁移和测试快捷入口。`deploy.sh` 当前提供六种基础部署模型：`dev` 组合 `compose-deps + local`，`dev-worker` 组合 `compose-deps + local + worker`，`local` 委托 `dev.sh start|stop|status api`，`worker` 委托 `dev.sh start|stop|status worker`，`compose-deps` 管理 PostgreSQL / Redis，`compose-full` 管理 API / PostgreSQL / Redis，并通过 `start-api.sh` 作为 API 容器入口；worker profile 使用 `start-worker.sh` 作为 Worker 容器入口。`verify.sh check` 当前覆盖 env、syntax、registry、alembic、scripts 和 pytest；`postgres` 与 `migration-roundtrip` 是显式 PostgreSQL gate，`redis-stream` 是显式 Redis Stream broker gate，`job-platform-smoke` 是显式跨仓 Job Service gate。`tools.sh` 当前提供无默认持久副作用的 secret 和 env URL 生成工具。
+`dev.sh` 当前提供本地 API / Worker 进程管理、端口扫描、环境检查、迁移和测试快捷入口。`deploy.sh` 当前提供七种基础部署模型：`dev` 组合 `compose-deps + local`，`dev-worker` 组合 `compose-deps + local + worker`，`local` 委托 `dev.sh start|stop|status api`，`worker` 委托 `dev.sh start|stop|status worker`，`compose-deps` 管理 PostgreSQL / Redis，`compose-worker` 管理 Worker / PostgreSQL / Redis，`compose-full` 管理 API / PostgreSQL / Redis，并通过 `start-api.sh` 作为 API 容器入口；worker profile 使用 `start-worker.sh` 作为 Worker 容器入口。`verify.sh check` 当前覆盖 env、syntax、registry、alembic、scripts 和 pytest；`postgres` 与 `migration-roundtrip` 是显式 PostgreSQL gate，`redis-stream` 是显式 Redis Stream broker gate，`job-platform-smoke` 是显式跨仓 Job Service gate。`tools.sh` 当前提供无默认持久副作用的 secret 和 env URL 生成工具。
 
 ## Verification Baseline
 

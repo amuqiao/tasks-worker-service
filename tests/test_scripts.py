@@ -697,6 +697,44 @@ def test_start_worker_rejects_unmanaged_repo_worker_process(tmp_path):
         unmanaged.wait(timeout=5)
 
 
+def test_start_worker_rejects_running_compose_worker(tmp_path):
+    bin_dir = write_fake_worker_uv(tmp_path)
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  case "$*" in
+    *"com.docker.compose.service=worker"*) echo "tasks-worker-service-lite-worker-1"; exit 0 ;;
+    *) exit 0 ;;
+  esac
+fi
+exit 1
+"""
+    )
+    docker.chmod(0o755)
+    env = script_env(
+        tmp_path,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        REAL_PYTHON=sys.executable,
+        FAKE_WORKER_PYTHON=str(bin_dir / "fake-worker-python"),
+    )
+
+    result = subprocess.run(
+        ["./scripts/dev.sh", "start", "worker"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 4
+    assert "compose worker is running" in result.stderr
+
+
 def test_stale_pid_with_matching_command_but_wrong_cwd_is_not_killed(tmp_path):
     sleeper = subprocess.Popen(
         ["bash", "-c", 'exec -a "uvicorn app.main:app" sleep 5'],
@@ -983,6 +1021,7 @@ def test_deploy_modes_smoke():
     assert result.returncode == 0
     assert "local" in result.stdout
     assert "compose-deps" in result.stdout
+    assert "compose-worker" in result.stdout
     assert "compose-full" in result.stdout
 
 
@@ -998,6 +1037,7 @@ def test_deploy_compose_subcommand_help():
 
     assert result.returncode == 0
     assert "compose-deps" in result.stdout
+    assert "compose-worker" in result.stdout
     assert "compose-full" in result.stdout
 
 
@@ -1012,7 +1052,7 @@ def test_deploy_down_without_mode_requires_explicit_target(tmp_path):
     )
 
     assert result.returncode == 2
-    assert "usage: ./scripts/deploy.sh down <dev|dev-worker|local|worker|compose-deps|compose-full|all>" in result.stderr
+    assert "usage: ./scripts/deploy.sh down <dev|dev-worker|local|worker|compose-deps|compose-worker|compose-full|all>" in result.stderr
     assert result.stdout == ""
 
 
@@ -1099,6 +1139,215 @@ def test_deploy_down_local_keeps_targeted_behavior_without_compose(tmp_path):
 
     assert result.returncode == 0
     assert "STOPPED" in result.stdout
+
+
+def test_deploy_compose_worker_manages_docker_worker_profile(tmp_path):
+    bin_dir = tmp_path / "bin"
+    log_file = tmp_path / "calls.log"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        f"""#!/usr/bin/env sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  echo "docker $@" >> "{log_file}"
+  exit 0
+fi
+exit 1
+"""
+    )
+    docker.chmod(0o755)
+    env = script_env(
+        tmp_path,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        POSTGRES_HOST_PORT=str(unused_port()),
+        REDIS_HOST_PORT=str(unused_port()),
+    )
+
+    up = subprocess.run(
+        ["./scripts/deploy.sh", "up", "compose-worker"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+    status = subprocess.run(
+        ["./scripts/deploy.sh", "status", "compose-worker"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+    down = subprocess.run(
+        ["./scripts/deploy.sh", "down", "compose-worker"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert up.returncode == 0, up.stdout + up.stderr
+    assert "== Compose Worker ==" in up.stdout
+    assert status.returncode == 0, status.stdout + status.stderr
+    assert "== Compose Worker ==" in status.stdout
+    assert down.returncode == 0, down.stdout + down.stderr
+    calls = log_file.read_text().splitlines()
+    assert any("up -d postgres redis" in call for call in calls)
+    assert any("--profile worker up -d --build worker" in call for call in calls)
+    assert any("--profile worker ps worker postgres redis" in call for call in calls)
+    assert any("--profile worker stop worker" in call for call in calls)
+    assert any("stop postgres redis" in call for call in calls)
+
+
+def test_deploy_compose_worker_rejects_unmanaged_local_worker(tmp_path):
+    bin_dir = tmp_path / "bin"
+    log_file = tmp_path / "calls.log"
+    bin_dir.mkdir()
+    fake_python = bin_dir / "fake-worker-python"
+    fake_python.write_text(
+        """#!/usr/bin/env sh
+if [ "$1" = "-m" ] && [ "$2" = "app.job_platform_worker.runner" ]; then
+  while :; do sleep 1; done
+fi
+exit 2
+"""
+    )
+    fake_python.chmod(0o755)
+    docker = bin_dir / "docker"
+    docker.write_text(
+        f"""#!/usr/bin/env sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  echo "docker $@" >> "{log_file}"
+  exit 0
+fi
+exit 1
+"""
+    )
+    docker.chmod(0o755)
+    env = script_env(
+        tmp_path,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        POSTGRES_HOST_PORT=str(unused_port()),
+        REDIS_HOST_PORT=str(unused_port()),
+    )
+    unmanaged = subprocess.Popen(
+        [str(fake_python), "-m", "app.job_platform_worker.runner"],
+        cwd=ROOT_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.2)
+
+        result = subprocess.run(
+            ["./scripts/deploy.sh", "up", "compose-worker"],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+
+        assert result.returncode == 4
+        assert "local worker is running" in result.stderr
+        assert not log_file.exists()
+    finally:
+        unmanaged.terminate()
+        unmanaged.wait(timeout=5)
+
+
+def test_deploy_compose_deps_down_rejects_running_compose_worker(tmp_path):
+    bin_dir = tmp_path / "bin"
+    log_file = tmp_path / "calls.log"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        f"""#!/usr/bin/env sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  case "$*" in
+    *"com.docker.compose.service=worker"*) echo "tasks-worker-service-lite-worker-1"; exit 0 ;;
+    *) exit 0 ;;
+  esac
+fi
+if [ "$1" = "compose" ]; then
+  echo "docker $@" >> "{log_file}"
+  exit 0
+fi
+exit 1
+"""
+    )
+    docker.chmod(0o755)
+
+    result = subprocess.run(
+        ["./scripts/deploy.sh", "down", "compose-deps"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path, PATH=f"{bin_dir}:{os.environ['PATH']}"),
+    )
+
+    assert result.returncode == 4
+    assert "compose worker is running" in result.stderr
+    assert not log_file.exists()
+
+
+def test_deploy_compose_worker_down_keeps_deps_when_compose_api_is_running(tmp_path):
+    bin_dir = tmp_path / "bin"
+    log_file = tmp_path / "calls.log"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        f"""#!/usr/bin/env sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  case "$*" in
+    *"com.docker.compose.service=api"*) echo "tasks-worker-service-lite-api-1"; exit 0 ;;
+    *) exit 0 ;;
+  esac
+fi
+if [ "$1" = "compose" ]; then
+  echo "docker $@" >> "{log_file}"
+  exit 0
+fi
+exit 1
+"""
+    )
+    docker.chmod(0o755)
+
+    result = subprocess.run(
+        ["./scripts/deploy.sh", "down", "compose-worker"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=script_env(tmp_path, PATH=f"{bin_dir}:{os.environ['PATH']}"),
+    )
+
+    assert result.returncode == 4
+    assert "compose-full api is running" in result.stderr
+    calls = log_file.read_text().splitlines()
+    assert any("--profile worker stop worker" in call for call in calls)
+    assert not any("stop postgres redis" in call for call in calls)
 
 
 def test_deploy_compose_deps_rejects_busy_host_port_before_docker(tmp_path):

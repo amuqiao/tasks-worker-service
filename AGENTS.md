@@ -23,6 +23,7 @@
   - 显式 Worker 开发环境：`./scripts/deploy.sh up|status|down dev-worker`
   - 仅宿主机 Worker：`./scripts/deploy.sh up|status|down worker`
   - 仅 Docker 依赖：`./scripts/deploy.sh up|status|down compose-deps`
+  - Docker Worker/依赖：`./scripts/deploy.sh up|status|down compose-worker`
   - 全 Docker API/依赖：`./scripts/deploy.sh up|status|down compose-full`
   - 全量停止必须显式使用：`./scripts/deploy.sh down all`
 - 不要使用裸 `./scripts/deploy.sh down`；该命令应报错，避免误停服务。

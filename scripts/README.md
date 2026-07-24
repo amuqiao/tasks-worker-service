@@ -8,7 +8,7 @@
 |---|---|
 | `dev.sh` | 本地开发：bootstrap、doctor、端口扫描、API / Worker 生命周期、迁移和测试快捷入口。 |
 | `verify.sh` | 一次性验证：env、syntax、registry、Alembic、脚本 smoke、pytest、PostgreSQL integration gate、Redis Stream gate、migration roundtrip gate、可选 Job Platform smoke。 |
-| `deploy.sh` | 运行模型入口：dev、dev-worker、local、worker、compose-deps、compose-full；`down all` 显式全量停止。 |
+| `deploy.sh` | 运行模型入口：dev、dev-worker、local、worker、compose-deps、compose-worker、compose-full；`down all` 显式全量停止。 |
 | `k8s.sh` | K8s Pod 内运维：配置、PostgreSQL、应用健康、Alembic 状态和手动迁移检查。 |
 | `smoke-job-platform.sh` | 跨仓 smoke：当前 Worker 模板注册到本地 `tasks-platform`，提交 job，dispatch，并等待 worker complete。 |
 | `tools.sh` | 无默认持久副作用工具：secret 生成、DATABASE__URL / REDIS__URL 编码。 |
@@ -20,7 +20,7 @@
 | `lib/common.sh` | 根目录定位、稳定输出 helper、错误退出、env 读取、前置条件检查。 |
 | `lib/runtime.sh` | 本地 API host/port/url、PID/log 路径、端口和进程 helper。 |
 | `lib/compose.sh` | docker compose / docker-compose 适配、compose project name 派生和 env 注入。 |
-| `lib/modes.sh` | local 与 compose-full 互斥保护、compose project 冲突检查。 |
+| `lib/modes.sh` | local/compose 运行模式互斥保护、worker/deps 停启保护、compose project 冲突检查。 |
 | `dev/check_ports.py` | 本地 TCP 端口扫描，支持人读输出和 JSON 输出。 |
 | `tools/env_url.py` | 生成编码后的 PostgreSQL / Redis URL。 |
 | `verify/migration_roundtrip.py` | 临时本地 PostgreSQL migration roundtrip 检查。 |
@@ -43,6 +43,8 @@
 ./scripts/deploy.sh down dev
 ./scripts/deploy.sh up dev-worker
 ./scripts/deploy.sh down dev-worker
+./scripts/deploy.sh up compose-worker
+./scripts/deploy.sh down compose-worker
 ./scripts/deploy.sh up compose-full
 ./scripts/deploy.sh down all
 ./scripts/tools.sh secret

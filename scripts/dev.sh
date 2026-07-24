@@ -395,6 +395,7 @@ start_worker() {
   fi
   require_uv
   require_process_identity_check
+  assert_no_compose_worker_running_for_local
   existing_pid="$(worker_pid)"
   if [[ -n "$existing_pid" ]]; then
     stop_worker

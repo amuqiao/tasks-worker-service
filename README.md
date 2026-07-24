@@ -78,6 +78,16 @@ Run the API, PostgreSQL, and Redis in Compose:
 ./scripts/deploy.sh up compose-full
 ```
 
+Run the Job Platform worker, PostgreSQL, and Redis in Compose:
+
+```bash
+./scripts/deploy.sh up compose-worker
+./scripts/deploy.sh status compose-worker
+./scripts/deploy.sh down compose-worker
+```
+
+`compose-worker` starts the Worker container and compose dependencies, but it still needs a reachable Job Service API. By default the Worker container calls `http://host.docker.internal:8100/internal/v1`; override `WORKER__JOB_SERVICE_BASE_URL` when Job Service is elsewhere.
+
 Run the Job Platform worker on the host:
 
 ```bash
