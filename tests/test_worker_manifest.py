@@ -129,6 +129,38 @@ async def test_manifest_registered_handler_can_execute() -> None:
     assert result.output["ok"] is True
 
 
+async def test_manifest_registered_failing_handler_can_execute_failure_path() -> None:
+    manifest = load_worker_manifest("app/worker/manifest.json")
+    registry = build_registry_from_manifest(manifest)
+    handler = registry.get("example.failing", 1)
+    assert handler is not None
+
+    from app.job_platform_worker.handlers import WorkerContext
+
+    with pytest.raises(RuntimeError, match="planned failure"):
+        await handler.handle(
+            QueueEnvelope(
+                protocol_version=1,
+                run_id="run-1",
+                node_id="node-1",
+                node_key="main",
+                attempt_id="attempt-1",
+                task_name="example.failing",
+                task_version=1,
+                queue_name="job.example-task.v1",
+                input_schema_hash=HASH,
+                output_schema_hash=HASH,
+                input={"message": "planned failure"},
+                trace_id="trace-1",
+            ),
+            WorkerContext(
+                worker_service="worker-x",
+                worker_name="worker-x-taskiq",
+                worker_session_id="worker-x-local",
+            ),
+        )
+
+
 def test_default_manifest_declares_template_example_tasks() -> None:
     manifest = load_worker_manifest("app/worker/manifest.json")
 
@@ -136,4 +168,5 @@ def test_default_manifest_declares_template_example_tasks() -> None:
         ("example.task", 1),
         ("example.object_ref", 1),
         ("example.long_running", 1),
+        ("example.failing", 1),
     }

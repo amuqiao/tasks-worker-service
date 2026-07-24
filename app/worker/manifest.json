@@ -91,6 +91,34 @@
           "compensation_window_seconds": 3600
         }
       ]
+    },
+    {
+      "task_name": "example.failing",
+      "task_version": 1,
+      "handler": "app.worker.task_modules.failing_example.handler:FailingExampleHandler",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "timeout_seconds": 300,
+      "max_retries": 0,
+      "retry_policy": {},
+      "idempotency_retention_seconds": 86400,
+      "required_worker_capabilities": ["cpu"],
+      "caller_bindings": [
+        {
+          "caller_service": "business-api-a",
+          "callback_url": null,
+          "compensation_window_seconds": 3600
+        }
+      ]
     }
   ]
 }
