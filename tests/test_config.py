@@ -38,6 +38,57 @@ def test_release_rejects_local_storage():
         )
 
 
+def test_aliyun_oss_requires_credentials():
+    with pytest.raises(ValidationError, match="STORAGE__BACKEND=aliyun_oss"):
+        AppSettings(_env_file=None, storage={"backend": "aliyun_oss"})
+
+
+def test_aliyun_oss_rejects_insecure_or_untrusted_endpoint():
+    base = {
+        "backend": "aliyun_oss",
+        "bucket": "storage-bucket",
+        "region": "cn-test",
+        "access_key_id": "ak",
+        "access_key_secret": "sk",
+    }
+    with pytest.raises(ValidationError, match="STORAGE__SCHEME=https"):
+        AppSettings(_env_file=None, storage=base | {"scheme": "http"})
+    with pytest.raises(ValidationError, match="aliyuncs.com"):
+        AppSettings(_env_file=None, storage=base | {"endpoint": "example.test"})
+
+
+def test_aliyun_oss_requires_audio_stem_bucket_alignment():
+    with pytest.raises(ValidationError, match="AUDIO_STEM__INPUT_BUCKET"):
+        AppSettings(
+            _env_file=None,
+            storage={
+                "backend": "aliyun_oss",
+                "bucket": "storage-bucket",
+                "region": "cn-test",
+                "access_key_id": "ak",
+                "access_key_secret": "sk",
+            },
+        )
+
+
+def test_aliyun_oss_requires_audio_stem_region_alignment():
+    with pytest.raises(ValidationError, match="AUDIO_STEM__INPUT_REGION"):
+        AppSettings(
+            _env_file=None,
+            storage={
+                "backend": "aliyun_oss",
+                "bucket": "storage-bucket",
+                "region": "cn-test",
+                "access_key_id": "ak",
+                "access_key_secret": "sk",
+            },
+            audio_stem={
+                "input_bucket": "storage-bucket",
+                "output_bucket": "storage-bucket",
+            },
+        )
+
+
 def test_taskiq_rejects_redis_list_broker():
     with pytest.raises(ValidationError, match="TASKIQ__BROKER_KIND"):
         AppSettings(taskiq={"broker_kind": "redis_list"})

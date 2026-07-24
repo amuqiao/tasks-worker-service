@@ -79,6 +79,24 @@ class AppSettings(BaseSettings):
     @model_validator(mode="after")
     def validate_invariants(self) -> "AppSettings":
         self.security.allowed_origin_list
+        if self.storage.backend == "aliyun_oss":
+            missing = {
+                "AUDIO_STEM__INPUT_BUCKET": self.audio_stem.input_bucket,
+                "AUDIO_STEM__INPUT_REGION": self.audio_stem.input_region,
+                "AUDIO_STEM__OUTPUT_BUCKET": self.audio_stem.output_bucket,
+                "AUDIO_STEM__OUTPUT_REGION": self.audio_stem.output_region,
+            }
+            missing_keys = [key for key, value in missing.items() if not value.strip()]
+            if missing_keys:
+                raise ValueError(f"STORAGE__BACKEND=aliyun_oss requires: {', '.join(missing_keys)}")
+            if self.audio_stem.input_bucket != self.storage.bucket:
+                raise ValueError("AUDIO_STEM__INPUT_BUCKET must match STORAGE__BUCKET when STORAGE__BACKEND=aliyun_oss")
+            if self.audio_stem.output_bucket != self.storage.bucket:
+                raise ValueError("AUDIO_STEM__OUTPUT_BUCKET must match STORAGE__BUCKET when STORAGE__BACKEND=aliyun_oss")
+            if self.audio_stem.input_region != self.storage.region:
+                raise ValueError("AUDIO_STEM__INPUT_REGION must match STORAGE__REGION when STORAGE__BACKEND=aliyun_oss")
+            if self.audio_stem.output_region != self.storage.region:
+                raise ValueError("AUDIO_STEM__OUTPUT_REGION must match STORAGE__REGION when STORAGE__BACKEND=aliyun_oss")
         validate_release_invariants(
             runtime=self.runtime,
             security=self.security,

@@ -8,7 +8,8 @@ from app.db.database import current_session_factory
 from app.db.unit_of_work import UnitOfWork
 from app.integrations.http_client import get_http_client
 from app.integrations.redis import get_redis_client
-from app.integrations.storage import DisabledObjectStorage, LocalObjectStorage, get_storage
+from app.integrations.storage import AliyunObjectStorage, DisabledObjectStorage, LocalObjectStorage, get_storage
+from app.integrations import storage as storage_module
 from app.main import create_app
 
 
@@ -71,9 +72,9 @@ async def test_local_object_storage_roundtrip(tmp_path):
     app = create_app(local_storage_settings(tmp_path))
     with TestClient(app) as client:
         storage = get_storage(client.app)
-        await storage.put("nested/example.txt", b"hello")
-        assert await storage.get("nested/example.txt") == b"hello"
-        await storage.delete("nested/example.txt")
+        await storage.put("bucket-a", "nested/example.txt", b"hello")
+        assert await storage.get("bucket-a", "nested/example.txt") == b"hello"
+        await storage.delete("bucket-a", "nested/example.txt")
 
 
 @pytest.mark.asyncio
@@ -81,7 +82,7 @@ async def test_local_object_storage_rejects_escaped_keys(tmp_path):
     storage = LocalObjectStorage(tmp_path / "objects")
 
     with pytest.raises(ValueError, match="storage key escapes storage root"):
-        await storage.put("../objects-escaped/file.txt", b"bad")
+        await storage.put("../objects-escaped", "file.txt", b"bad")
 
 
 def test_disabled_storage_provider_is_explicit():
@@ -94,6 +95,58 @@ def test_disabled_storage_provider_is_explicit():
     )
     with TestClient(app) as client:
         assert isinstance(get_storage(client.app), DisabledObjectStorage)
+
+
+@pytest.mark.asyncio
+async def test_aliyun_object_storage_uses_bucket_and_key(monkeypatch):
+    calls: list[tuple[str, str, str, bytes | None]] = []
+
+    class FakeClient:
+        def __init__(self, config):
+            self.config = config
+
+        def put_object(self, key, content, *, content_type):
+            calls.append(("put", self.config.bucket, key, content))
+
+        def get_object(self, key):
+            calls.append(("get", self.config.bucket, key, None))
+            return b"hello"
+
+        def delete_object(self, key):
+            calls.append(("delete", self.config.bucket, key, None))
+
+    monkeypatch.setattr(storage_module, "AliyunOSSClient", FakeClient)
+    app = create_app(
+        AppSettings(
+            security={"service_api_key": "test-service-key"},
+            database={"url": "sqlite+aiosqlite:///:memory:"},
+            storage={
+                "backend": "aliyun_oss",
+                "bucket": "default-bucket",
+                "region": "cn-test",
+                "access_key_id": "ak",
+                "access_key_secret": "sk",
+            },
+            audio_stem={
+                "input_bucket": "default-bucket",
+                "input_region": "cn-test",
+                "output_bucket": "default-bucket",
+                "output_region": "cn-test",
+            },
+        )
+    )
+    with TestClient(app) as client:
+        storage = get_storage(client.app)
+        assert isinstance(storage, AliyunObjectStorage)
+        await storage.put("default-bucket", "input.wav", b"hello", content_type="audio/wav")
+        assert await storage.get("default-bucket", "input.wav") == b"hello"
+        await storage.delete("default-bucket", "input.wav")
+
+    assert calls == [
+        ("put", "default-bucket", "input.wav", b"hello"),
+        ("get", "default-bucket", "input.wav", None),
+        ("delete", "default-bucket", "input.wav", None),
+    ]
 
 
 def test_session_factory_override_is_scoped_to_app(app, sqlite_session_factory):

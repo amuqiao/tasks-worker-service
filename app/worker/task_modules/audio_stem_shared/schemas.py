@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, field_validator
 
 AudioStemModelService = Literal["local", "triton"]
-AudioObjectScheme = Literal["local"]
 StemName = Literal["drums", "bass", "other", "vocals"]
 
 SUPPORTED_AUDIO_CONTENT_TYPES = frozenset({"audio/wav", "audio/x-wav"})
@@ -17,20 +16,18 @@ class StrictModel(BaseModel):
 
 
 class AudioObjectRef(StrictModel):
-    scheme: AudioObjectScheme
-    bucket: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._-]+$")
-    region: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
-    key: str = Field(min_length=1, max_length=1024)
+    public_url: AnyUrl
+    internal_url: AnyUrl
     content_type: str = Field(min_length=1, max_length=64)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    size_bytes: int = Field(gt=0)
-    version_id: str | None = Field(default=None, min_length=1, max_length=256)
 
-    @field_validator("key")
+    @field_validator("public_url", "internal_url")
     @classmethod
-    def validate_key(cls, value: str) -> str:
-        if value.startswith("/") or ".." in value.split("/"):
-            raise ValueError("key must be a relative object key")
+    def validate_https_url(cls, value: AnyUrl) -> AnyUrl:
+        if value.scheme != "https":
+            raise ValueError("OSS URL must use https")
+        if value.query or value.fragment:
+            raise ValueError("OSS URL must not contain query string or fragment")
         return value
 
     @field_validator("content_type")
@@ -49,13 +46,10 @@ class AudioStemInput(StrictModel):
 
 
 class StemObjectRef(StrictModel):
-    scheme: AudioObjectScheme
-    bucket: str = Field(min_length=1, max_length=128)
-    region: str = Field(min_length=1, max_length=64)
-    key: str = Field(min_length=1, max_length=1024)
+    public_url: AnyUrl
+    internal_url: AnyUrl
     content_type: str = "audio/wav"
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    size_bytes: int = Field(gt=0)
 
 
 class AudioStemOutput(StrictModel):

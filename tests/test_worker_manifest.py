@@ -164,6 +164,7 @@ async def test_manifest_registered_failing_handler_can_execute_failure_path() ->
 def test_default_manifest_declares_template_example_tasks() -> None:
     manifest = load_worker_manifest("app/worker/manifest.json")
 
+    assert "oss-storage" in manifest.capabilities
     assert {(task.task_name, task.task_version) for task in manifest.tasks} == {
         ("example.task", 1),
         ("example.object_ref", 1),
@@ -172,3 +173,15 @@ def test_default_manifest_declares_template_example_tasks() -> None:
         ("audio_stem_separation", 1),
         ("audio_stem_separation_triton", 1),
     }
+    audio_tasks = {
+        task.task_name: task
+        for task in manifest.tasks
+        if task.task_name in {"audio_stem_separation", "audio_stem_separation_triton"}
+    }
+    assert set(audio_tasks) == {"audio_stem_separation", "audio_stem_separation_triton"}
+    assert all("oss-storage" in task.required_worker_capabilities for task in audio_tasks.values())
+    for task in audio_tasks.values():
+        input_audio = task.input_schema["properties"]["input_audio"]
+        assert input_audio["required"] == ["public_url", "internal_url", "content_type", "sha256"]
+        assert "scheme" not in input_audio["properties"]
+        assert "size_bytes" not in input_audio["properties"]

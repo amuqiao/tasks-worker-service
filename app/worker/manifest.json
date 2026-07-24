@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "worker_service": "worker-x",
   "queue_name": "job.example-task.v1",
-  "capabilities": ["cpu", "audio-stem", "local-storage"],
+  "capabilities": ["cpu", "audio-stem", "oss-storage"],
   "tasks": [
     {
       "task_name": "example.task",
@@ -130,16 +130,12 @@
         "properties": {
           "input_audio": {
             "type": "object",
-            "required": ["scheme", "bucket", "region", "key", "content_type", "sha256", "size_bytes"],
+            "required": ["public_url", "internal_url", "content_type", "sha256"],
             "properties": {
-              "scheme": {"type": "string", "enum": ["local"]},
-              "bucket": {"type": "string", "minLength": 1},
-              "region": {"type": "string", "minLength": 1},
-              "key": {"type": "string", "minLength": 1},
+              "public_url": {"type": "string", "format": "uri"},
+              "internal_url": {"type": "string", "format": "uri"},
               "content_type": {"type": "string", "enum": ["audio/wav", "audio/x-wav"]},
-              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-              "size_bytes": {"type": "integer", "minimum": 1},
-              "version_id": {"type": "string", "minLength": 1}
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
             },
             "additionalProperties": false
           },
@@ -168,7 +164,7 @@
       "max_retries": 0,
       "retry_policy": {},
       "idempotency_retention_seconds": 86400,
-      "required_worker_capabilities": ["cpu", "audio-stem", "local-storage"],
+      "required_worker_capabilities": ["cpu", "audio-stem", "oss-storage"],
       "caller_bindings": [
         {
           "caller_service": "business-api-a",
@@ -187,16 +183,12 @@
         "properties": {
           "input_audio": {
             "type": "object",
-            "required": ["scheme", "bucket", "region", "key", "content_type", "sha256", "size_bytes"],
+            "required": ["public_url", "internal_url", "content_type", "sha256"],
             "properties": {
-              "scheme": {"type": "string", "enum": ["local"]},
-              "bucket": {"type": "string", "minLength": 1},
-              "region": {"type": "string", "minLength": 1},
-              "key": {"type": "string", "minLength": 1},
+              "public_url": {"type": "string", "format": "uri"},
+              "internal_url": {"type": "string", "format": "uri"},
               "content_type": {"type": "string", "enum": ["audio/wav", "audio/x-wav"]},
-              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-              "size_bytes": {"type": "integer", "minimum": 1},
-              "version_id": {"type": "string", "minLength": 1}
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
             },
             "additionalProperties": false
           },
@@ -225,7 +217,7 @@
       "max_retries": 0,
       "retry_policy": {},
       "idempotency_retention_seconds": 86400,
-      "required_worker_capabilities": ["cpu", "audio-stem", "local-storage"],
+      "required_worker_capabilities": ["cpu", "audio-stem", "oss-storage"],
       "caller_bindings": [
         {
           "caller_service": "business-api-a",

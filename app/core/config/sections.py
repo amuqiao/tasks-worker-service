@@ -113,11 +113,15 @@ class WorkerSettings(ConfigSection):
 
 
 class StorageSettings(ConfigSection):
-    backend: Literal["disabled", "local", "s3_compatible"] = "disabled"
+    backend: Literal["disabled", "local", "aliyun_oss", "s3_compatible"] = "disabled"
     local_path: str = "storage/objects"
     endpoint: str = ""
+    public_endpoint: str = ""
+    endpoint_style: Literal["virtual_host", "custom_domain", "path"] = "virtual_host"
+    scheme: Literal["http", "https"] = "https"
     bucket: str = ""
     region: str = ""
+    project_root: str = ""
     access_key_id: str = ""
     access_key_secret: SecretStr = Field(default=SecretStr(""), repr=False)
 
@@ -126,8 +130,19 @@ class StorageSettings(ConfigSection):
         if self.backend == "local" and not self.local_path.strip():
             raise ValueError("STORAGE__LOCAL_PATH is required when STORAGE__BACKEND=local")
         if self.backend == "s3_compatible":
+            raise ValueError("STORAGE__BACKEND=s3_compatible is not implemented; use STORAGE__BACKEND=aliyun_oss")
+        if self.backend == "aliyun_oss":
+            if self.scheme != "https":
+                raise ValueError("STORAGE__BACKEND=aliyun_oss requires STORAGE__SCHEME=https")
+            normalized_endpoint = self.endpoint.removeprefix("https://").removeprefix("http://").strip("/")
+            if normalized_endpoint and not normalized_endpoint.endswith(".aliyuncs.com"):
+                raise ValueError("STORAGE__ENDPOINT must be an aliyuncs.com host when STORAGE__BACKEND=aliyun_oss")
+            normalized_public_endpoint = (
+                self.public_endpoint.removeprefix("https://").removeprefix("http://").strip("/")
+            )
+            if normalized_public_endpoint and "/" in normalized_public_endpoint:
+                raise ValueError("STORAGE__PUBLIC_ENDPOINT must be a host without path")
             required = {
-                "STORAGE__ENDPOINT": self.endpoint,
                 "STORAGE__BUCKET": self.bucket,
                 "STORAGE__REGION": self.region,
                 "STORAGE__ACCESS_KEY_ID": self.access_key_id,
@@ -135,7 +150,7 @@ class StorageSettings(ConfigSection):
             }
             missing = [name for name, value in required.items() if not value]
             if missing:
-                raise ValueError(f"STORAGE__BACKEND=s3_compatible requires: {', '.join(missing)}")
+                raise ValueError(f"STORAGE__BACKEND=aliyun_oss requires: {', '.join(missing)}")
         return self
 
 

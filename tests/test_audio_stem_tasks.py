@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
@@ -52,9 +53,11 @@ async def _service(tmp_path: Path, *, model_service: str = "local") -> AudioStem
     return AudioStemSeparationService(
         AudioStemRuntimeConfig(
             storage=LocalObjectStorage(tmp_path),
-            output_bucket="audio-outputs",
-            output_region="local",
+            output_bucket="audio-bucket",
+            output_region="cn-test",
             output_prefix="audio-stem-test",
+            input_bucket="audio-bucket",
+            input_region="cn-test",
         ),
         FakeSeparator(model_service=model_service),
     )
@@ -63,18 +66,15 @@ async def _service(tmp_path: Path, *, model_service: str = "local") -> AudioStem
 def _audio_input(tmp_path: Path) -> dict:
     content = _wav_bytes()
     key = "inputs/audio.wav"
-    path = tmp_path / key
+    path = tmp_path / "audio-bucket" / key
     path.parent.mkdir(parents=True)
     path.write_bytes(content)
     return {
         "input_audio": {
-            "scheme": "local",
-            "bucket": "audio-inputs",
-            "region": "local",
-            "key": key,
+            "public_url": f"https://audio-bucket.oss-cn-test.aliyuncs.com/{key}",
+            "internal_url": f"https://audio-bucket.oss-cn-test-internal.aliyuncs.com/{key}",
             "content_type": "audio/wav",
             "sha256": sha256(content).hexdigest(),
-            "size_bytes": len(content),
         },
         "payload_schema_version": "audio-stem-separation:v1",
     }
@@ -118,12 +118,27 @@ async def test_audio_stem_cpu_handler_writes_four_stems(tmp_path: Path) -> None:
     assert set(result.output["stems"]) == {"drums", "bass", "other", "vocals"}
     assert result.output["sample_rate"] == 44100
     assert result.output_ref == {
-        "scheme": "local",
-        "bucket": "audio-outputs",
-        "region": "local",
+        "scheme": "oss",
+        "bucket": "audio-bucket",
+        "region": "cn-test",
         "key": "audio-stem-test/run-audio-1/manifest.json",
+        "content_type": "application/json",
+        "sha256": result.output_ref["sha256"],
+        "size_bytes": result.output_ref["size_bytes"],
     }
-    assert (tmp_path / "audio-stem-test/run-audio-1/vocals.wav").exists()
+    manifest_path = tmp_path / "audio-bucket/audio-stem-test/run-audio-1/manifest.json"
+    manifest_bytes = manifest_path.read_bytes()
+    assert sha256(manifest_bytes).hexdigest() == result.output_ref["sha256"]
+    assert len(manifest_bytes) == result.output_ref["size_bytes"]
+    manifest = json.loads(manifest_bytes)
+    assert set(manifest["stems"]) == {"drums", "bass", "other", "vocals"}
+    assert manifest["stems"]["vocals"]["public_url"] == (
+        "https://audio-bucket.oss-cn-test.aliyuncs.com/audio-stem-test/run-audio-1/vocals.wav"
+    )
+    assert manifest["stems"]["vocals"]["internal_url"] == (
+        "https://audio-bucket.oss-cn-test-internal.aliyuncs.com/audio-stem-test/run-audio-1/vocals.wav"
+    )
+    assert (tmp_path / "audio-bucket/audio-stem-test/run-audio-1/vocals.wav").exists()
 
 
 async def test_audio_stem_triton_handler_uses_triton_model_service_without_fallback(tmp_path: Path) -> None:
@@ -172,17 +187,47 @@ async def test_audio_stem_rejects_sha256_mismatch(tmp_path: Path) -> None:
         raise AssertionError("expected sha256 mismatch")
 
 
-async def test_audio_stem_rejects_wrong_local_namespace(tmp_path: Path) -> None:
+async def test_audio_stem_rejects_wrong_oss_namespace(tmp_path: Path) -> None:
     handler = AudioStemSeparationHandler(await _service(tmp_path))
     payload = _audio_input(tmp_path)
-    payload["input_audio"]["bucket"] = "other-bucket"
+    payload["input_audio"]["public_url"] = "https://other-bucket.oss-cn-test.aliyuncs.com/inputs/audio.wav"
+    payload["input_audio"]["internal_url"] = "https://other-bucket.oss-cn-test-internal.aliyuncs.com/inputs/audio.wav"
 
     try:
         await handler.handle(_envelope(task_name="audio_stem_separation", input_payload=payload), _context())
     except ValueError as exc:
-        assert "namespace" in str(exc)
+        assert "OSS bucket is not allowed" in str(exc)
     else:
         raise AssertionError("expected namespace rejection")
+
+
+async def test_audio_stem_rejects_mismatched_internal_url(tmp_path: Path) -> None:
+    handler = AudioStemSeparationHandler(await _service(tmp_path))
+    payload = _audio_input(tmp_path)
+    payload["input_audio"]["internal_url"] = "https://audio-bucket.oss-cn-test-internal.aliyuncs.com/inputs/other.wav"
+
+    try:
+        await handler.handle(_envelope(task_name="audio_stem_separation", input_payload=payload), _context())
+    except ValueError as exc:
+        assert "same object" in str(exc)
+    else:
+        raise AssertionError("expected mismatched URL rejection")
+
+
+async def test_audio_stem_rejects_unsafe_run_id(tmp_path: Path) -> None:
+    handler = AudioStemSeparationHandler(await _service(tmp_path))
+
+    try:
+        await handler.handle(
+            _envelope(task_name="audio_stem_separation", input_payload=_audio_input(tmp_path)).model_copy(
+                update={"run_id": "../escape"}
+            ),
+            _context(),
+        )
+    except ValueError as exc:
+        assert "run_id" in str(exc)
+    else:
+        raise AssertionError("expected unsafe run_id rejection")
 
 
 def test_triton_input_payload_forces_triton_model_service(tmp_path: Path) -> None:

@@ -87,7 +87,7 @@ route
 |---|---|---|
 | `postgres` | app lifespan 内创建 async engine 和 session factory；测试可显式覆盖 session factory。 | 非 override 场景必须是 PostgreSQL URL，并执行 `SELECT 1`。 |
 | `redis` | fake client；`REDIS__ENABLED=true` 会显式失败。 | fake client 未关闭则 ok。 |
-| `object_storage` | `disabled` backend 和 local filesystem backend。 | provider 成功启动则 ok。 |
+| `object_storage` | `disabled`、local filesystem、`aliyun_oss` backend。 | provider 成功启动则 ok；不执行远端 OSS probe。 |
 | `http_client` | shared `httpx.AsyncClient`，注入 request/trace headers。 | client 未关闭则 ok。 |
 
 业务请求路径通过 typed dependency 从 `request.app.state` 获取资源，不通过 lifecycle registry 字符串查找，也不依赖模块级数据库懒初始化。
@@ -120,6 +120,12 @@ route
 - `scripts/smoke-job-platform.sh` 是可选跨仓 smoke 入口，使用当前 Worker manifest 注册到本地 `tasks-platform`，提交 job，调用 Job Service dispatcher，并等待当前 Worker runner complete。
 
 Worker runtime 的运行入口、配置和 ack/no_ack broker 语义记录在 [`worker-runtime.md`](worker-runtime.md)。作为可复制模板新增业务 task 的目录、manifest、幂等、input_ref/output_ref 和长任务规范记录在 [`worker-template.md`](worker-template.md)。
+
+## Audio Stem Tasks
+
+当前 Worker Manifest 注册两个音频分离任务：`audio_stem_separation@1` 和 `audio_stem_separation_triton@1`。两个任务都要求 `oss-storage` capability，输入 `input_audio` 使用 OSS URL Ref：`public_url`、`internal_url`、`content_type`、`sha256`。worker 会把 URL Ref 解析成 Aliyun OSS bucket/region/key，校验 bucket/region 与 `AUDIO_STEM__INPUT_*` 配置一致，读取 OSS 对象并用 `sha256` 校验内容后再执行推理。
+
+任务成功后，worker 将 `drums`、`bass`、`other`、`vocals` 四个 stem 写入 `AUDIO_STEM__OUTPUT_BUCKET` / `AUDIO_STEM__OUTPUT_PREFIX`，manifest 内每个 stem 都是 `public_url/internal_url/content_type/sha256` URL Ref。回写 Job Platform 的 `output_ref` 指向 manifest JSON 的 OSS object ref，用于业务服务后续按需读取大结果。
 
 ## Scripts And Verification
 

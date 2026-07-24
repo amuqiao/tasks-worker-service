@@ -3,7 +3,6 @@ from __future__ import annotations
 from hashlib import sha256
 import os
 from pathlib import Path
-import shutil
 
 import pytest
 
@@ -33,15 +32,18 @@ async def test_audio_stem_cpu_integration_with_local_sample(tmp_path: Path) -> N
         pytest.skip("local audio sample is missing")
     content = source.read_bytes()
     input_key = "inputs/sample.wav"
-    (tmp_path / "inputs").mkdir()
-    shutil.copyfile(source, tmp_path / input_key)
+    input_path = tmp_path / "audio-bucket" / input_key
+    input_path.parent.mkdir(parents=True)
+    input_path.write_bytes(content)
 
     service = AudioStemSeparationService(
         AudioStemRuntimeConfig(
             storage=LocalObjectStorage(tmp_path),
-            output_bucket="audio-outputs",
-            output_region="local",
+            output_bucket="audio-bucket",
+            output_region="cn-test",
             output_prefix="audio-stem-cpu-integration",
+            input_bucket="audio-bucket",
+            input_region="cn-test",
         ),
         HTDemucsONNXSeparator(
             model_dir=Path(os.environ.get("AUDIO_STEM__MODEL_DIR", ".data/models/htdemucs-ft")),
@@ -63,13 +65,10 @@ async def test_audio_stem_cpu_integration_with_local_sample(tmp_path: Path) -> N
             output_schema_hash=HASH,
             input={
                 "input_audio": {
-                    "scheme": "local",
-                    "bucket": "audio-inputs",
-                    "region": "local",
-                    "key": input_key,
+                    "public_url": f"https://audio-bucket.oss-cn-test.aliyuncs.com/{input_key}",
+                    "internal_url": f"https://audio-bucket.oss-cn-test-internal.aliyuncs.com/{input_key}",
                     "content_type": "audio/wav",
                     "sha256": sha256(content).hexdigest(),
-                    "size_bytes": len(content),
                 },
                 "payload_schema_version": "audio-stem-separation:v1",
                 "max_duration_seconds": 3600,
@@ -87,4 +86,4 @@ async def test_audio_stem_cpu_integration_with_local_sample(tmp_path: Path) -> N
     assert result.output["model_service"] == "local"
     assert result.output["sample_rate"] == 44100
     assert set(result.output["stems"]) == {"drums", "bass", "other", "vocals"}
-    assert (tmp_path / "audio-stem-cpu-integration/run-audio-cpu-integration/vocals.wav").exists()
+    assert (tmp_path / "audio-bucket/audio-stem-cpu-integration/run-audio-cpu-integration/vocals.wav").exists()

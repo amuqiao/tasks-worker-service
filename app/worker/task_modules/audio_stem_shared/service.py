@@ -8,6 +8,8 @@ from pathlib import Path
 import time
 from typing import Any, Protocol
 
+from app.integrations.aliyun_oss import normalize_object_key
+from app.integrations.oss_url_ref import CanonicalObjectRef, canonical_ref_from_oss_url_ref, oss_url_ref_from_output_object
 from app.integrations.storage import LocalObjectStorage, ObjectStorage
 from app.job_platform_worker.handlers import WorkerContext
 from app.worker.task_modules.audio_stem_shared.schemas import (
@@ -28,8 +30,10 @@ class AudioStemRuntimeConfig:
     output_bucket: str
     output_region: str
     output_prefix: str
+    public_endpoint: str = ""
+    project_root: str = ""
     input_bucket: str = "audio-inputs"
-    input_region: str = "local"
+    input_region: str = "cn-shanghai"
     max_input_bytes: int = 200 * 1024 * 1024
     max_duration_seconds: float = 3600
 
@@ -69,10 +73,11 @@ class AudioStemSeparationService:
         context: WorkerContext,
     ) -> tuple[AudioStemOutput, dict[str, str]]:
         context.raise_if_cancel_requested()
-        self._validate_ref(data.input_audio)
+        input_ref = self._canonical_input_ref(data.input_audio)
+        self._validate_ref(input_ref)
         await _safe_report_progress(context, 5, "reading input audio")
-        content = await self._read_input(data.input_audio)
-        self._validate_content(content, data.input_audio)
+        content = await self._read_input(input_ref)
+        self._validate_content(content, input_ref)
 
         await _safe_report_progress(context, 15, "decoding input audio")
         decoded = await asyncio.to_thread(_decode_wav, content)
@@ -89,17 +94,21 @@ class AudioStemSeparationService:
         for index, stem in enumerate(STEM_NAMES, start=1):
             context.raise_if_cancel_requested()
             stem_bytes = await asyncio.to_thread(_wav_bytes, separated.stems[stem], sample_rate=decoded.sample_rate)
-            key = self._output_key(run_id=run_id, stem=stem)
-            await self._config.storage.put(key, stem_bytes)
-            stems[stem] = StemObjectRef(
-                scheme="local",
+            key = self._object_key(self._output_key(run_id=run_id, stem=stem))
+            await self._config.storage.put(
+                self._config.output_bucket,
+                key,
+                stem_bytes,
+                content_type="audio/wav",
+            )
+            stems[stem] = StemObjectRef.model_validate(oss_url_ref_from_output_object(
                 bucket=self._config.output_bucket,
                 region=self._config.output_region,
                 key=key,
                 content_type="audio/wav",
-                sha256=sha256(stem_bytes).hexdigest(),
-                size_bytes=len(stem_bytes),
-            )
+                content_hash=f"sha256:{sha256(stem_bytes).hexdigest()}",
+                public_endpoint=self._config.public_endpoint or None,
+            ))
             await _safe_report_progress(context, 25 + index * 15, f"wrote {stem} stem")
 
         output = AudioStemOutput(
@@ -113,31 +122,47 @@ class AudioStemSeparationService:
             triton_model_version=separated.triton_model_version if model_service == "triton" else None,
         )
         output_ref = {
-            "scheme": "local",
+            "scheme": "oss",
             "bucket": self._config.output_bucket,
             "region": self._config.output_region,
-            "key": self._output_key(run_id=run_id, stem="manifest"),
+            "key": self._object_key(self._output_key(run_id=run_id, stem="manifest")),
         }
-        await self._config.storage.put(output_ref["key"], output.model_dump_json().encode())
+        manifest_bytes = output.model_dump_json().encode()
+        output_ref["content_type"] = "application/json"
+        output_ref["sha256"] = sha256(manifest_bytes).hexdigest()
+        output_ref["size_bytes"] = len(manifest_bytes)
+        await self._config.storage.put(
+            self._config.output_bucket,
+            output_ref["key"],
+            manifest_bytes,
+            content_type="application/json",
+        )
         await _safe_report_progress(context, 100, "audio stem separation completed")
         return output, output_ref
 
-    async def _read_input(self, ref: AudioObjectRef) -> bytes:
-        return await self._config.storage.get(ref.key)
+    async def _read_input(self, ref: CanonicalObjectRef) -> bytes:
+        return await self._config.storage.get(ref.bucket, ref.key)
 
-    def _validate_ref(self, ref: AudioObjectRef) -> None:
+    def _canonical_input_ref(self, ref: AudioObjectRef) -> CanonicalObjectRef:
+        return canonical_ref_from_oss_url_ref(
+            ref.model_dump(mode="json"),
+            allowed_buckets={self._config.input_bucket},
+            allowed_regions={self._config.input_region},
+            allowed_content_types={"audio/wav", "audio/x-wav"},
+            public_endpoint=self._config.public_endpoint or None,
+            public_endpoint_bucket=self._config.input_bucket,
+            public_endpoint_region=self._config.input_region,
+        )
+
+    def _validate_ref(self, ref: CanonicalObjectRef) -> None:
         if ref.bucket != self._config.input_bucket or ref.region != self._config.input_region:
-            raise ValueError("input audio ref is outside the configured local namespace")
-        if ref.size_bytes > self._config.max_input_bytes:
-            raise ValueError("input audio exceeds configured max input bytes")
+            raise ValueError("input audio ref is outside the configured OSS namespace")
 
-    def _validate_content(self, content: bytes, ref: AudioObjectRef) -> None:
-        if len(content) != ref.size_bytes:
-            raise ValueError("input audio size_bytes mismatch")
+    def _validate_content(self, content: bytes, ref: CanonicalObjectRef) -> None:
         if len(content) > self._config.max_input_bytes:
             raise ValueError("input audio exceeds configured max input bytes")
         actual = sha256(content).hexdigest()
-        if actual != ref.sha256:
+        if f"sha256:{actual}" != ref.content_hash:
             raise ValueError("input audio sha256 mismatch")
 
     def _duration_limit(self, data: AudioStemInput) -> float:
@@ -146,9 +171,13 @@ class AudioStemSeparationService:
         return min(data.max_duration_seconds, self._config.max_duration_seconds)
 
     def _output_key(self, *, run_id: str, stem: str) -> str:
+        _validate_run_id(run_id)
         prefix = self._config.output_prefix.strip("/")
         suffix = "manifest.json" if stem == "manifest" else f"{stem}.wav"
         return f"{prefix}/{run_id}/{suffix}" if prefix else f"{run_id}/{suffix}"
+
+    def _object_key(self, key: str) -> str:
+        return normalize_object_key(self._config.project_root, key)
 
 
 class HTDemucsONNXSeparator:
@@ -442,3 +471,10 @@ def _import_onnxruntime() -> Any:
 async def _safe_report_progress(context: WorkerContext, percent: int, message: str) -> None:
     if context.progress_reporter is not None:
         await context.report_progress(percent, message)
+
+
+def _validate_run_id(run_id: str) -> None:
+    if not run_id or run_id.startswith("/") or "/" in run_id:
+        raise ValueError("run_id must be a single OSS key segment")
+    if run_id in {".", ".."}:
+        raise ValueError("run_id must not contain path traversal")

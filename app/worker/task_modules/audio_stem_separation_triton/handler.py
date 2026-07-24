@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.config import get_settings
+from app.integrations.storage import build_object_storage
 from app.job_platform_worker.handlers import HandlerResult, WorkerContext
 from app.job_platform_worker.protocol import QueueEnvelope
 from app.worker.task_modules.audio_stem_shared.schemas import AudioStemInput
 from app.worker.task_modules.audio_stem_shared.service import (
+    AudioStemRuntimeConfig,
     AudioStemSeparationService,
     HTDemucsTritonSeparator,
-    build_local_audio_stem_config,
 )
 
 
@@ -31,13 +32,15 @@ class AudioStemSeparationTritonHandler:
         if self._service is not None:
             return self._service
         settings = get_settings()
-        if settings.storage.backend != "local":
-            raise RuntimeError("audio_stem_separation_triton requires STORAGE__BACKEND=local for local contract tests")
-        config = build_local_audio_stem_config(
-            storage_path=settings.storage.local_path,
+        if settings.storage.backend != "aliyun_oss":
+            raise RuntimeError("audio_stem_separation_triton requires STORAGE__BACKEND=aliyun_oss")
+        config = AudioStemRuntimeConfig(
+            storage=build_object_storage(settings),
             output_bucket=settings.audio_stem.output_bucket,
             output_region=settings.audio_stem.output_region,
             output_prefix=settings.audio_stem.output_prefix,
+            public_endpoint=settings.storage.public_endpoint,
+            project_root=settings.storage.project_root,
             input_bucket=settings.audio_stem.input_bucket,
             input_region=settings.audio_stem.input_region,
             max_input_bytes=settings.audio_stem.max_input_bytes,
