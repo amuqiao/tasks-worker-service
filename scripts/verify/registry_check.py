@@ -16,10 +16,13 @@ from app.main import build_lifecycle_provider_registry, create_app
 from app.tools.example_tool import validate_example_tool_spec
 
 REQUIRED_DOCS = (
+    ROOT_DIR / "docs/README.md",
     ROOT_DIR / "docs/current/implementation.md",
+    ROOT_DIR / "docs/current/worker-runtime.md",
+    ROOT_DIR / "docs/current/worker-template.md",
     ROOT_DIR / "docs/contracts/api-contract.md",
     ROOT_DIR / "docs/contracts/extension-contract.md",
-    ROOT_DIR / "docs/plans/drift-checklist.md",
+    ROOT_DIR / "scripts/README.md",
 )
 API_CONTRACT_DOC = ROOT_DIR / "docs/contracts/api-contract.md"
 

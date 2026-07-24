@@ -1,6 +1,6 @@
 # Current Implementation
 
-本文记录 `tasks-worker-service` 当前已经实现并由测试覆盖的工程事实。它不描述未来计划；未实现内容见 [`../plans/drift-checklist.md`](../plans/drift-checklist.md)。
+本文记录 `tasks-worker-service` 当前已经实现并由测试覆盖的工程事实。它不描述未来计划；模板使用入口见 [`../README.md`](../README.md)。
 
 ## Runtime Model
 

@@ -7,7 +7,7 @@ from app.core.error_registry import error_registry
 from app.core.lifecycle import build_health_registry
 from app.core.registry_checks import validate_operation_route_drift
 from app.main import build_lifecycle_provider_registry, create_app
-from scripts.verify.registry_check import API_CONTRACT_DOC, validate_api_contract_route_table
+from scripts.verify.registry_check import API_CONTRACT_DOC, REQUIRED_DOCS, validate_api_contract_route_table
 
 
 def test_error_registry_contains_internal_error():
@@ -81,6 +81,16 @@ def test_operation_registry_requires_openapi_contract_metadata():
 
 def test_api_contract_route_table_matches_registry():
     validate_api_contract_route_table()
+
+
+def test_required_docs_include_worker_template_docs():
+    required = {path.as_posix() for path in REQUIRED_DOCS}
+
+    assert any(path.endswith("docs/README.md") for path in required)
+    assert any(path.endswith("docs/current/worker-template.md") for path in required)
+    assert any(path.endswith("docs/current/worker-runtime.md") for path in required)
+    assert any(path.endswith("scripts/README.md") for path in required)
+    assert not any("/docs/plans/" in path for path in required)
 
 
 def test_api_contract_route_table_uses_default_documented_prefix(monkeypatch):

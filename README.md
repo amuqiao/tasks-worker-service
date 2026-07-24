@@ -123,13 +123,12 @@ Generate local secrets and encoded connection URLs:
 ## Documentation
 
 - Current implementation facts: [`docs/current/implementation.md`](docs/current/implementation.md)
+- Docs index: [`docs/README.md`](docs/README.md)
 - Worker runtime: [`docs/current/worker-runtime.md`](docs/current/worker-runtime.md)
 - Worker template guide: [`docs/current/worker-template.md`](docs/current/worker-template.md)
 - HTTP API contract: [`docs/contracts/api-contract.md`](docs/contracts/api-contract.md)
 - Extension contract: [`docs/contracts/extension-contract.md`](docs/contracts/extension-contract.md)
-- Drift checklist and P1 plan: [`docs/plans/drift-checklist.md`](docs/plans/drift-checklist.md)
 - Scripts contract: [`scripts/README.md`](scripts/README.md)
-- Original skeleton target: [`docs/FastAPI服务骨架.md`](docs/FastAPI服务骨架.md)
 
 ## Verification
 
